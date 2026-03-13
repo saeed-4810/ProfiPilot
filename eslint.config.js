@@ -6,7 +6,7 @@ const prettierConfig = require("eslint-config-prettier");
 /** @type {import("eslint").Linter.FlatConfig[]} */
 module.exports = [
   {
-    ignores: ["**/dist/**", "**/node_modules/**", "**/.next/**", "**/build/**"],
+    ignores: ["**/dist/**", "**/node_modules/**", "**/.next/**", "**/build/**", "**/*.d.ts"],
   },
   {
     files: ["**/*.ts", "**/*.tsx"],
