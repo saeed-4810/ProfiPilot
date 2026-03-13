@@ -1,0 +1,210 @@
+# @prefpilot/frontend
+
+Next.js 14 + TypeScript + Tailwind CSS v3 + Framer Motion + Playwright workspace — part of the PrefPilot monorepo.
+
+Implements PERF-80 Setup B: frontend workspace scaffold.
+
+---
+
+## Prerequisites
+
+- Node.js ≥ 20
+- pnpm ≥ 9
+- Monorepo root installed (`pnpm install` from `code/`)
+
+---
+
+## Getting started
+
+```bash
+# From monorepo root
+cp apps/frontend/.env.local.example apps/frontend/.env.local
+# Edit .env.local with real values
+
+pnpm --filter @prefpilot/frontend dev
+# Open http://localhost:3000
+```
+
+---
+
+## Scripts
+
+| Script       | Command                             | Description               |
+| ------------ | ----------------------------------- | ------------------------- |
+| `dev`        | `next dev --port 3000`              | Development server        |
+| `build`      | `next build`                        | Production build          |
+| `test`       | `vitest run`                        | Unit tests (Vitest + RTL) |
+| `lint`       | `eslint app components hooks tests` | ESLint (0 warnings)       |
+| `typecheck`  | `tsc --noEmit`                      | TypeScript type check     |
+| `clean`      | `rm -rf .next dist out`             | Remove build artefacts    |
+| `e2e`        | `playwright test`                   | Playwright E2E tests      |
+| `e2e:ui`     | `playwright test --ui`              | Playwright interactive UI |
+| `e2e:report` | `playwright show-report`            | Open last HTML report     |
+
+All scripts can also be run from the monorepo root:
+
+```bash
+pnpm --filter @prefpilot/frontend <script>
+```
+
+---
+
+## Directory layout
+
+```
+apps/frontend/
+  app/
+    (auth)/login/page.tsx    Shell — auth flow
+    audit/page.tsx           Shell — audit flow
+    dashboard/page.tsx       Shell — dashboard/project flow
+    export/page.tsx          Shell — export/billing flow
+    results/page.tsx         Shell — results/AI flow
+    globals.css              Global styles + prefers-reduced-motion CSS
+    layout.tsx               Root layout with metadata
+    page.tsx                 Home → redirects to /login
+  components/
+    MotionWrapper.tsx        Framer Motion page wrapper (uses framer-motion useReducedMotion)
+  tests/
+    components/
+      MotionWrapper.test.tsx T-P105-001/002: MotionWrapper render + reduced-motion tests
+    pages/
+      shell-pages.test.tsx  T-P105-003: Shell page render tests (5 pages)
+    setup.ts                 Vitest + jsdom global setup (matchMedia mock)
+  .env.local.example         Environment variable template
+  next.config.mjs            Next.js configuration
+  tsconfig.json              TypeScript config (REQUIRED module/moduleResolution overrides)
+  vitest.config.ts           Vitest configuration
+  playwright.config.ts       Playwright E2E configuration
+  tailwind.config.ts         Tailwind CSS v3 configuration
+  postcss.config.mjs         PostCSS config (Tailwind + autoprefixer)
+  e2e/
+    auth.spec.ts             E2E scenarios E-AUTH-001 → E-AUTH-004
+    dashboard.spec.ts        E2E scenarios E-DASH-001 → E-DASH-003
+    audit.spec.ts            E2E scenarios E-AUDIT-001 → E-AUDIT-003
+    results.spec.ts          E2E scenarios E-RESULTS-001 → E-RESULTS-003
+    export.spec.ts           E2E scenarios E-EXPORT-001 → E-EXPORT-003
+```
+
+---
+
+## tsconfig overrides (important)
+
+`apps/frontend/tsconfig.json` extends `../../tsconfig.base.json` but overrides:
+
+| Setting            | Base value   | Frontend override                   | Reason                             |
+| ------------------ | ------------ | ----------------------------------- | ---------------------------------- |
+| `module`           | `NodeNext`   | `ESNext`                            | Next.js incompatible with NodeNext |
+| `moduleResolution` | `NodeNext`   | `bundler`                           | Next.js incompatible with NodeNext |
+| `jsx`              | —            | `preserve`                          | Next.js requires jsx: preserve     |
+| `lib`              | `["ES2022"]` | `["dom", "dom.iterable", "esnext"]` | Browser APIs required              |
+
+---
+
+## Tailwind CSS
+
+Tailwind CSS v3 is the **sole CSS framework** for layout, spacing, color, and typography.
+
+- Config: `tailwind.config.ts` — content paths cover `app/**`, `components/**`, `hooks/**`
+- PostCSS: `postcss.config.mjs` — Tailwind + Autoprefixer
+- Custom CSS (`globals.css`) is limited to: Tailwind directives (`@tailwind base/components/utilities`) and the `prefers-reduced-motion` override block
+- No inline `style=` for anything Tailwind can express; no CSS-in-JS libraries
+
+---
+
+## Playwright E2E Tests
+
+Playwright runs against the live Next.js dev server (`http://localhost:3000`).
+
+```bash
+# Install browser (once)
+pnpm exec playwright install chromium
+
+# Run all E2E tests
+pnpm --filter @prefpilot/frontend e2e
+
+# Open interactive UI
+pnpm --filter @prefpilot/frontend e2e:ui
+```
+
+### E2E scenario structure
+
+Each spec file has two tiers:
+
+1. **Shell tests** — always runnable; verify page renders and returns 200.
+2. **Feature tests** — stubbed with `test.fixme`; activated when the feature ticket ships.
+
+| Spec file               | Shell tests       | Feature stubs  | Linked ticket |
+| ----------------------- | ----------------- | -------------- | ------------- |
+| `e2e/auth.spec.ts`      | E-AUTH-001/002    | E-AUTH-003/004 | PERF-98       |
+| `e2e/dashboard.spec.ts` | E-DASH-001/002    | E-DASH-003     | PERF-102      |
+| `e2e/audit.spec.ts`     | E-AUDIT-001/002   | E-AUDIT-003    | PERF-100      |
+| `e2e/results.spec.ts`   | E-RESULTS-001/002 | E-RESULTS-003  | PERF-101      |
+| `e2e/export.spec.ts`    | E-EXPORT-001/002  | E-EXPORT-003   | PERF-103      |
+
+Output artifacts (gitignored): `playwright-report/`, `test-results/`
+
+---
+
+## Framer Motion + prefers-reduced-motion
+
+All shell pages use `MotionWrapper` for entry animations:
+
+- **Normal motion**: fade + slight vertical slide (`y: 10 → 0`, 300ms)
+- **Reduced motion**: opacity-only fade (100ms), respecting the OS setting
+- Global CSS also honours `prefers-reduced-motion: reduce`
+
+`MotionWrapper` uses Framer Motion’s built-in `useReducedMotion` hook so
+animations stay in sync with the OS `prefers-reduced-motion` setting.
+
+---
+
+## Secrets policy
+
+| File                 | In git?             |
+| -------------------- | ------------------- |
+| `.env.local`         | NO — gitignored     |
+| `.env.local.example` | YES — template only |
+
+`NEXT_PUBLIC_*` vars are **public** and safe to expose in the browser. They are
+Firebase client config values (not secret keys).
+
+---
+
+## Environment variables
+
+| Variable                                   | Required | Description                  |
+| ------------------------------------------ | -------- | ---------------------------- |
+| `NEXT_PUBLIC_API_BASE_URL`                 | Yes      | Backend service URL          |
+| `NEXT_PUBLIC_FIREBASE_API_KEY`             | Yes      | Firebase Web API key         |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`         | Yes      | Firebase auth domain         |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID`          | Yes      | Firebase project ID          |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`      | Yes      | Firebase storage bucket      |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Yes      | Firebase messaging sender ID |
+| `NEXT_PUBLIC_FIREBASE_APP_ID`              | Yes      | Firebase app ID              |
+
+---
+
+## Handoff notes
+
+This scaffold explicitly unblocks the following downstream tickets:
+
+| Ticket   | Feature                           | Touchpoint                                               |
+| -------- | --------------------------------- | -------------------------------------------------------- |
+| PERF-98  | Authentication (F2)               | `app/(auth)/login/page.tsx` → wire Firebase Auth sign-in |
+| PERF-102 | Dashboard / Project overview (F4) | `app/dashboard/page.tsx` → wire project list API         |
+| PERF-101 | Results / AI Insights (F5)        | `app/results/page.tsx` → wire results API                |
+| PERF-103 | Export / Billing (F5)             | `app/export/page.tsx` → wire export + billing gate       |
+| PERF-100 | Audit engine frontend             | `app/audit/page.tsx` → wire audit trigger + progress     |
+
+Each shell page includes the target ticket reference in its placeholder copy.
+
+---
+
+## T-\* Scenario coverage (PERF-105)
+
+| ID         | Scenario                                                                   | File                                      | Status         |
+| ---------- | -------------------------------------------------------------------------- | ----------------------------------------- | -------------- |
+| T-P105-001 | `MotionWrapper` respects reduced motion (framer-motion `useReducedMotion`) | `tests/components/MotionWrapper.test.tsx` | PASS (3 tests) |
+| T-P105-002 | All 5 shell pages render without errors                                    | `tests/pages/shell-pages.test.tsx`        | PASS (5 tests) |
+| T-P105-003 | tsconfig `module`/`moduleResolution` overrides verified                    | `tsconfig.json` inspection                | PASS           |
+| T-P105-004 | `pnpm build` produces all 7 routes (5 shells + home + 404)                 | `next build` output                       | PASS           |
