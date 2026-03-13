@@ -45,6 +45,7 @@ apps/backend/
       firebase.ts     Firebase Admin SDK initialization
   tests/
     health.test.ts    Smoke test for health endpoint
+    firebase.test.ts  Firebase Admin init unit tests
   dist/               Compiled output (git-ignored)
   Dockerfile          Multi-stage production image
   tsconfig.json       Extends ../../tsconfig.base.json
