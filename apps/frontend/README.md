@@ -1,6 +1,6 @@
 # @prefpilot/frontend
 
-Next.js 14 + TypeScript + Framer Motion workspace — part of the PrefPilot monorepo.
+Next.js 14 + TypeScript + Tailwind CSS v3 + Framer Motion + Playwright workspace — part of the PrefPilot monorepo.
 
 Implements PERF-80 Setup B: frontend workspace scaffold.
 
@@ -29,14 +29,17 @@ pnpm --filter @prefpilot/frontend dev
 
 ## Scripts
 
-| Script      | Command                             | Description               |
-| ----------- | ----------------------------------- | ------------------------- |
-| `dev`       | `next dev --port 3000`              | Development server        |
-| `build`     | `next build`                        | Production build          |
-| `test`      | `vitest run`                        | Unit tests (Vitest + RTL) |
-| `lint`      | `eslint app components hooks tests` | ESLint (0 warnings)       |
-| `typecheck` | `tsc --noEmit`                      | TypeScript type check     |
-| `clean`     | `rm -rf .next dist out`             | Remove build artefacts    |
+| Script       | Command                             | Description               |
+| ------------ | ----------------------------------- | ------------------------- |
+| `dev`        | `next dev --port 3000`              | Development server        |
+| `build`      | `next build`                        | Production build          |
+| `test`       | `vitest run`                        | Unit tests (Vitest + RTL) |
+| `lint`       | `eslint app components hooks tests` | ESLint (0 warnings)       |
+| `typecheck`  | `tsc --noEmit`                      | TypeScript type check     |
+| `clean`      | `rm -rf .next dist out`             | Remove build artefacts    |
+| `e2e`        | `playwright test`                   | Playwright E2E tests      |
+| `e2e:ui`     | `playwright test --ui`              | Playwright interactive UI |
+| `e2e:report` | `playwright show-report`            | Open last HTML report     |
 
 All scripts can also be run from the monorepo root:
 
@@ -75,6 +78,15 @@ apps/frontend/
   next.config.mjs            Next.js configuration
   tsconfig.json              TypeScript config (REQUIRED module/moduleResolution overrides)
   vitest.config.ts           Vitest configuration
+  playwright.config.ts       Playwright E2E configuration
+  tailwind.config.ts         Tailwind CSS v3 configuration
+  postcss.config.mjs         PostCSS config (Tailwind + autoprefixer)
+  e2e/
+    auth.spec.ts             E2E scenarios E-AUTH-001 → E-AUTH-004
+    dashboard.spec.ts        E2E scenarios E-DASH-001 → E-DASH-003
+    audit.spec.ts            E2E scenarios E-AUDIT-001 → E-AUDIT-003
+    results.spec.ts          E2E scenarios E-RESULTS-001 → E-RESULTS-003
+    export.spec.ts           E2E scenarios E-EXPORT-001 → E-EXPORT-003
 ```
 
 ---
@@ -89,6 +101,51 @@ apps/frontend/
 | `moduleResolution` | `NodeNext`   | `bundler`                           | Next.js incompatible with NodeNext |
 | `jsx`              | —            | `preserve`                          | Next.js requires jsx: preserve     |
 | `lib`              | `["ES2022"]` | `["dom", "dom.iterable", "esnext"]` | Browser APIs required              |
+
+---
+
+## Tailwind CSS
+
+Tailwind CSS v3 is the **sole CSS framework** for layout, spacing, color, and typography.
+
+- Config: `tailwind.config.ts` — content paths cover `app/**`, `components/**`, `hooks/**`
+- PostCSS: `postcss.config.mjs` — Tailwind + Autoprefixer
+- Custom CSS (`globals.css`) is limited to: Tailwind directives (`@tailwind base/components/utilities`) and the `prefers-reduced-motion` override block
+- No inline `style=` for anything Tailwind can express; no CSS-in-JS libraries
+
+---
+
+## Playwright E2E Tests
+
+Playwright runs against the live Next.js dev server (`http://localhost:3000`).
+
+```bash
+# Install browser (once)
+pnpm exec playwright install chromium
+
+# Run all E2E tests
+pnpm --filter @prefpilot/frontend e2e
+
+# Open interactive UI
+pnpm --filter @prefpilot/frontend e2e:ui
+```
+
+### E2E scenario structure
+
+Each spec file has two tiers:
+
+1. **Shell tests** — always runnable; verify page renders and returns 200.
+2. **Feature tests** — stubbed with `test.fixme`; activated when the feature ticket ships.
+
+| Spec file               | Shell tests       | Feature stubs  | Linked ticket |
+| ----------------------- | ----------------- | -------------- | ------------- |
+| `e2e/auth.spec.ts`      | E-AUTH-001/002    | E-AUTH-003/004 | PERF-98       |
+| `e2e/dashboard.spec.ts` | E-DASH-001/002    | E-DASH-003     | PERF-102      |
+| `e2e/audit.spec.ts`     | E-AUDIT-001/002   | E-AUDIT-003    | PERF-100      |
+| `e2e/results.spec.ts`   | E-RESULTS-001/002 | E-RESULTS-003  | PERF-101      |
+| `e2e/export.spec.ts`    | E-EXPORT-001/002  | E-EXPORT-003   | PERF-103      |
+
+Output artifacts (gitignored): `playwright-report/`, `test-results/`
 
 ---
 
