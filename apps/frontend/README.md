@@ -63,14 +63,10 @@ apps/frontend/
     layout.tsx               Root layout with metadata
     page.tsx                 Home → redirects to /login
   components/
-    MotionWrapper.tsx        Framer Motion page wrapper (reduced motion aware)
-  hooks/
-    useReducedMotion.ts      Detects prefers-reduced-motion OS preference
+    MotionWrapper.tsx        Framer Motion page wrapper (uses framer-motion useReducedMotion)
   tests/
     components/
-      MotionWrapper.test.tsx T-P105-002: MotionWrapper render tests
-    hooks/
-      useReducedMotion.test.ts  T-P105-001: Hook unit tests (4 scenarios)
+      MotionWrapper.test.tsx T-P105-001/002: MotionWrapper render + reduced-motion tests
     pages/
       shell-pages.test.tsx  T-P105-003: Shell page render tests (5 pages)
     setup.ts                 Vitest + jsdom global setup (matchMedia mock)
@@ -157,8 +153,8 @@ All shell pages use `MotionWrapper` for entry animations:
 - **Reduced motion**: opacity-only fade (100ms), respecting the OS setting
 - Global CSS also honours `prefers-reduced-motion: reduce`
 
-The `useReducedMotion` hook (in `hooks/useReducedMotion.ts`) subscribes to
-MediaQuery change events and keeps animations in sync with live OS changes.
+`MotionWrapper` uses Framer Motion’s built-in `useReducedMotion` hook so
+animations stay in sync with the OS `prefers-reduced-motion` setting.
 
 ---
 
@@ -206,10 +202,9 @@ Each shell page includes the target ticket reference in its placeholder copy.
 
 ## T-\* Scenario coverage (PERF-105)
 
-| ID         | Scenario                                                      | File                                      | Status         |
-| ---------- | ------------------------------------------------------------- | ----------------------------------------- | -------------- |
-| T-P105-001 | `useReducedMotion` hook returns correct boolean in all states | `tests/hooks/useReducedMotion.test.ts`    | PASS (4 tests) |
-| T-P105-002 | `MotionWrapper` renders children and applies className        | `tests/components/MotionWrapper.test.tsx` | PASS (3 tests) |
-| T-P105-003 | All 5 shell pages render without errors                       | `tests/pages/shell-pages.test.tsx`        | PASS (5 tests) |
-| T-P105-004 | tsconfig `module`/`moduleResolution` overrides verified       | `tsconfig.json` inspection                | PASS           |
-| T-P105-005 | `pnpm build` produces all 7 routes (5 shells + home + 404)    | `next build` output                       | PASS           |
+| ID         | Scenario                                                                   | File                                      | Status         |
+| ---------- | -------------------------------------------------------------------------- | ----------------------------------------- | -------------- |
+| T-P105-001 | `MotionWrapper` respects reduced motion (framer-motion `useReducedMotion`) | `tests/components/MotionWrapper.test.tsx` | PASS (3 tests) |
+| T-P105-002 | All 5 shell pages render without errors                                    | `tests/pages/shell-pages.test.tsx`        | PASS (5 tests) |
+| T-P105-003 | tsconfig `module`/`moduleResolution` overrides verified                    | `tsconfig.json` inspection                | PASS           |
+| T-P105-004 | `pnpm build` produces all 7 routes (5 shells + home + 404)                 | `next build` output                       | PASS           |
