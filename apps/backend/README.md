@@ -61,12 +61,13 @@ apps/backend/
 
 ## Environment variables
 
-| Variable                        | Required | Description                             |
-| ------------------------------- | -------- | --------------------------------------- |
-| `PORT`                          | No       | HTTP port (default: `3001`)             |
-| `NODE_ENV`                      | No       | `development` \| `test` \| `production` |
-| `FIREBASE_PROJECT_ID`           | Yes      | Firebase project identifier             |
-| `FIREBASE_SERVICE_ACCOUNT_JSON` | No       | Service account JSON string (local dev) |
+| Variable                        | Required | Description                                                                 |
+| ------------------------------- | -------- | --------------------------------------------------------------------------- |
+| `PORT`                          | No       | HTTP port (default: `3001`)                                                 |
+| `NODE_ENV`                      | No       | `development` \| `test` \| `production`                                     |
+| `FIREBASE_PROJECT_ID`           | Yes      | Firebase project identifier                                                 |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | No       | Service account JSON string (local dev)                                     |
+| `LOG_LEVEL`                     | No       | Logging verbosity: `info` \| `debug` \| `warn` \| `error` (default: `info`) |
 
 ## API endpoints
 
