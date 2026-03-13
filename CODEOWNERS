@@ -1,0 +1,18 @@
+# Global fallback — Alex owns all backend/infra, Nina owns all frontend
+* @alex-lead-engineer
+
+# Backend workspace
+/apps/backend/ @alex-lead-engineer
+
+# Frontend workspace
+/apps/frontend/ @nina-frontend-ux-engineer
+
+# CI/CD pipeline
+/.github/ @alex-lead-engineer
+
+# Shared tooling (changes need both to review)
+/tsconfig.base.json @alex-lead-engineer @nina-frontend-ux-engineer
+/eslint.config.js @alex-lead-engineer @nina-frontend-ux-engineer
+/.prettierrc.json @alex-lead-engineer @nina-frontend-ux-engineer
+/package.json @alex-lead-engineer
+/pnpm-workspace.yaml @alex-lead-engineer

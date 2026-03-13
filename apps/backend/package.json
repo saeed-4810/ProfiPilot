@@ -1,0 +1,13 @@
+{
+  "name": "@prefpilot/backend",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "echo '[backend] dev placeholder'",
+    "build": "echo '[backend] build placeholder'",
+    "test": "echo '[backend] test placeholder'",
+    "lint": "echo '[backend] lint placeholder'",
+    "typecheck": "echo '[backend] typecheck placeholder'",
+    "clean": "rm -rf dist"
+  }
+}
