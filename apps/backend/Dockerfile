@@ -9,6 +9,7 @@ RUN npm install -g pnpm@9
 # Copy workspace manifests for dependency installation
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY apps/backend/package.json ./apps/backend/
+COPY apps/frontend/package.json ./apps/frontend/
 
 RUN pnpm install --frozen-lockfile
 
@@ -29,6 +30,7 @@ COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/pnpm-lock.yaml ./
 COPY --from=builder /app/apps/backend/package.json ./apps/backend/
+COPY --from=builder /app/apps/frontend/package.json ./apps/frontend/
 COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
 
 RUN pnpm install --frozen-lockfile --prod
