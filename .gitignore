@@ -42,3 +42,9 @@ coverage/
 # Firebase
 .firebase/
 firebase-debug.log
+*-firebase-adminsdk-*.json
+
+# Playwright
+playwright-report/
+test-results/
+playwright/.cache/
