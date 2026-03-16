@@ -44,4 +44,12 @@ describe("Firebase Admin initialization", () => {
     const result = initFirebase();
     expect(result).toBeDefined();
   });
+
+  it("returns cached app on second call (singleton pattern)", async () => {
+    process.env["FIREBASE_PROJECT_ID"] = "test-project";
+    const { initFirebase } = await import("../src/lib/firebase.js");
+    const first = initFirebase();
+    const second = initFirebase();
+    expect(second).toBe(first);
+  });
 });
