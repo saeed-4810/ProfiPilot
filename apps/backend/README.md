@@ -38,14 +38,22 @@ pnpm --filter @prefpilot/backend dev
 ```
 apps/backend/
   src/
-    index.ts          Entry point — Express app + server bind
+    index.ts          Entry point — Express app + middleware + routes
+    domain/
+      errors.ts       ErrorEnvelope type + AppError class (ADR-003)
+      auth.ts         Zod schemas + session config (ADR-010)
+    middleware/
+      auth.ts         requireAuth session cookie verification
+      error.ts        Global error handler → ErrorEnvelope
     routes/
       health.ts       GET /health handler
+      auth.ts         POST /auth/verify-token, POST /auth/logout, GET /auth/session
     lib/
       firebase.ts     Firebase Admin SDK initialization
   tests/
     health.test.ts    Smoke test for health endpoint
     firebase.test.ts  Firebase Admin init unit tests
+    auth.test.ts      Auth routes + middleware tests (T-AUTH-001..005)
   dist/               Compiled output (git-ignored)
   Dockerfile          Multi-stage production image
   tsconfig.json       Extends ../../tsconfig.base.json
@@ -72,9 +80,12 @@ apps/backend/
 
 ## API endpoints
 
-| Method | Path      | Description                                 | Auth |
-| ------ | --------- | ------------------------------------------- | ---- |
-| GET    | `/health` | Liveness probe — returns `{ status: "ok" }` | None |
+| Method | Path                 | Description                                          | Auth           |
+| ------ | -------------------- | ---------------------------------------------------- | -------------- |
+| GET    | `/health`            | Liveness probe — returns `{ status: "ok" }`          | None           |
+| POST   | `/auth/verify-token` | Verify Firebase ID token, set session cookie         | Firebase token |
+| GET    | `/auth/session`      | Check session validity — returns `{ status, uid }`   | Session cookie |
+| POST   | `/auth/logout`       | Revoke refresh token, clear session cookie           | Session cookie |
 
 ## Handoff notes (F1/F3/F5 touchpoints)
 
