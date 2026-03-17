@@ -1,5 +1,17 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// Mock next/navigation for LoginPage which uses useRouter
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
+// Mock auth lib to prevent Firebase initialization
+vi.mock("@/lib/auth", () => ({
+  signIn: vi.fn(),
+  getAuthErrorMessage: () => "An unexpected error occurred.",
+}));
+
 import LoginPage from "../../app/(auth)/login/page";
 import DashboardPage from "../../app/dashboard/page";
 import AuditPage from "../../app/audit/page";
@@ -35,10 +47,11 @@ describe("T-P105-003 — Shell pages render without errors", () => {
     expect(screen.getByRole("heading", { name: /dashboard/i })).toBeInTheDocument();
   });
 
-  it("AuditPage renders audit shell", () => {
+  it("AuditPage renders audit page with form", () => {
     render(<AuditPage />);
     expect(screen.getByTestId("audit-page")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /audit/i })).toBeInTheDocument();
+    expect(screen.getByTestId("audit-url-input")).toBeInTheDocument();
   });
 
   it("ResultsPage renders results shell", () => {
