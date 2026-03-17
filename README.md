@@ -23,10 +23,10 @@ prefpilot/
 
 ## Prerequisites
 
-| Tool   | Version |
-|--------|---------|
-| Node   | ≥ 20    |
-| pnpm   | ≥ 9     |
+| Tool | Version |
+| ---- | ------- |
+| Node | ≥ 20    |
+| pnpm | ≥ 9     |
 
 ## Getting started
 
@@ -44,14 +44,14 @@ pnpm --filter @prefpilot/frontend dev
 
 ## Scripts (root — proxied to all workspaces)
 
-| Command          | Description                          |
-|------------------|--------------------------------------|
-| `pnpm dev`       | Start all workspaces in parallel     |
-| `pnpm build`     | Build all workspaces                 |
-| `pnpm test`      | Run all workspace test suites        |
-| `pnpm lint`      | Lint all workspaces                  |
-| `pnpm typecheck` | Type-check all workspaces            |
-| `pnpm clean`     | Remove build artifacts + node_modules|
+| Command          | Description                           |
+| ---------------- | ------------------------------------- |
+| `pnpm dev`       | Start all workspaces in parallel      |
+| `pnpm build`     | Build all workspaces                  |
+| `pnpm test`      | Run all workspace test suites         |
+| `pnpm lint`      | Lint all workspaces                   |
+| `pnpm typecheck` | Type-check all workspaces             |
+| `pnpm clean`     | Remove build artifacts + node_modules |
 
 ## Workspace-specific docs
 
@@ -60,7 +60,7 @@ pnpm --filter @prefpilot/frontend dev
 
 ## CI
 
-GitHub Actions runs on every PR targeting `main` or `develop`:
+GitHub Actions runs on every PR targeting `main`:
 
 1. **Install** — `pnpm install --frozen-lockfile`
 2. **Lint** — `pnpm lint`

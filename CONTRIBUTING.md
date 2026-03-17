@@ -82,7 +82,7 @@ hotfix/PERF-xxx-critical-billing-bug
 
 - Branch name must include the Jira ticket ID (`PERF-xxx`).
 - Slugs are lowercase kebab-case.
-- Never work directly on `main` or `develop`.
+- Never work directly on `main`.
 - Delete branches after the PR is merged.
 
 ---
@@ -150,11 +150,10 @@ Runs `pnpm typecheck` (recursive TypeScript type check across all workspaces) be
 
 ### Target branches
 
-| Source branch type                                                     | Target    | Notes                               |
-| ---------------------------------------------------------------------- | --------- | ----------------------------------- |
-| `feat/*`, `fix/*`, `chore/*`, `docs/*`, `test/*`, `refactor/*`, `ci/*` | `develop` | All day-to-day work                 |
-| `develop`                                                              | `main`    | Release promotion (sprint end)      |
-| `hotfix/*`                                                             | `main`    | Critical fix, notify Mo immediately |
+| Source branch type                                                     | Target | Notes                               |
+| ---------------------------------------------------------------------- | ------ | ----------------------------------- |
+| `feat/*`, `fix/*`, `chore/*`, `docs/*`, `test/*`, `refactor/*`, `ci/*` | `main` | All day-to-day work                 |
+| `hotfix/*`                                                             | `main` | Critical fix, notify Mo immediately |
 
 ### Required reviewers
 
@@ -165,7 +164,7 @@ Runs `pnpm typecheck` (recursive TypeScript type check across all workspaces) be
 | `.github/**`                                                                                        | Alex                 |
 | `tsconfig.base.json`, `eslint.config.js`, `.prettierrc.json`, `package.json`, `pnpm-workspace.yaml` | Alex + Nina          |
 | Any `*.test.ts` or `*.spec.ts` file                                                                 | Omar                 |
-| `develop` → `main` (release)                                                                        | Alex + Mo            |
+| Release tag on `main`                                                                               | Alex + Mo            |
 | `hotfix/*` → `main`                                                                                 | Alex (Mo notified)   |
 
 Reviewers are auto-assigned via [CODEOWNERS](CODEOWNERS).
@@ -193,9 +192,9 @@ fix(frontend): resolve Framer Motion import on SSR (PERF-98)
 
 ## 7. Merge strategy
 
-**Squash merge only** for all PRs into `develop` and `main`.
+**Squash merge only** for all PRs into `main`.
 
-- This keeps the `develop` and `main` history linear and clean.
+- This keeps the `main` history linear and clean.
 - The squash commit message is taken from the PR title — ensure the PR title is correct before merging.
 - Rebase-merge and merge commits are disabled on the repository.
 
@@ -220,18 +219,6 @@ After merge:
 | Delete branch on merge            | Enabled               |
 | Allow force push                  | Disabled              |
 
-### `develop`
-
-| Rule                              | Setting               |
-| --------------------------------- | --------------------- |
-| Direct push                       | Blocked               |
-| Required status checks            | All CI jobs must pass |
-| Required approvals                | 1 (CODEOWNERS)        |
-| Dismiss stale reviews on new push | Enabled               |
-| Require up-to-date branch         | Enabled               |
-| Delete branch on merge            | Enabled               |
-| Allow force push                  | Disabled              |
-
 ---
 
 ## 9. Per-developer responsibilities
@@ -243,4 +230,4 @@ See [GIT_WORKFLOW.md](GIT_WORKFLOW.md) for the full developer-to-workspace-to-re
 | Alex      | `apps/backend`, `/.github`, shared tooling | `feat/PERF-xxx-*`     | All backend PRs, all CI/infra PRs, shared tooling PRs |
 | Nina      | `apps/frontend`                            | `feat/PERF-xxx-*`     | All frontend PRs                                      |
 | Omar      | Both (test files only)                     | `test/PERF-xxx-*`     | PRs touching `*.test.ts` / `*.spec.ts` files          |
-| Mo        | Process governance                         | N/A                   | All `develop` → `main` release PRs                    |
+| Mo        | Process governance                         | N/A                   | All PRs targeting `main`                              |
