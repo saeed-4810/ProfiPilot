@@ -34,7 +34,7 @@ prefpilot/
 | Branch prefix          | `feat/PERF-xxx-*`, `fix/PERF-xxx-*`, `ci/PERF-xxx-*`, `chore/PERF-xxx-*`                                                                                  |
 | Commit scope           | `backend`, `ci`, `root`, `deps`                                                                                                                           |
 | Mandatory reviewer for | All `apps/backend/**` PRs, all `.github/**` PRs, all shared tooling PRs (`tsconfig.base.json`, `eslint.config.js`, `package.json`, `pnpm-workspace.yaml`) |
-| Release gate role      | Must approve `develop` → `main` promotion                                                                                                                 |
+| Release gate role      | Must approve release tags on `main`                                                                                                                       |
 | DoD gate               | All backend ACs pass; API contract rows verified against API Spec v1 (PERF-93); T-\* scenarios defined and passing                                        |
 
 ### Nina — Frontend & UX Engineer
@@ -68,7 +68,7 @@ prefpilot/
 | Primary workspace      | Process governance (no direct code ownership)                                          |
 | Owns                   | Sprint board hygiene, branch protection enforcement, release gate signoff              |
 | Branch prefix          | N/A — no feature branches                                                              |
-| Mandatory reviewer for | All `develop` → `main` release PRs                                                     |
+| Mandatory reviewer for | All PRs targeting `main`                                                               |
 | DoD gate               | DoR/DoD checklist satisfied; Jira + Confluence hygiene confirmed; Decision Log updated |
 
 ---
@@ -77,38 +77,34 @@ prefpilot/
 
 ```
 main (protected, production)
-  └── develop (protected, integration / staging)
-        └── feat/PERF-106-backend-workspace
-        └── feat/PERF-105-frontend-workspace
-        └── fix/PERF-98-auth-token-refresh
-        └── test/PERF-97-qa-coverage
-
-hotfix/PERF-xxx-critical-bug  →  main (+ cherry-pick to develop)
+  └── feat/PERF-106-backend-workspace
+  └── feat/PERF-105-frontend-workspace
+  └── fix/PERF-98-auth-token-refresh
+  └── test/PERF-97-qa-coverage
+  └── hotfix/PERF-xxx-critical-bug
 ```
 
 ### Flow for normal feature work
 
-1. Cut branch from `develop`: `git checkout -b feat/PERF-xxx-<slug> develop`
+1. Cut branch from `main`: `git checkout -b feat/PERF-xxx-<slug> main`
 2. Make commits (commitlint enforces format on each commit).
-3. Push and open PR targeting `develop`.
+3. Push and open PR targeting `main`.
 4. CI runs; CODEOWNERS auto-assigns reviewer.
 5. Reviewer approves; author squash-merges.
 6. Delete branch; update Jira ticket status.
 
-### Flow for a release to `main`
+### Flow for a release tag
 
-1. QA confirms all P0 scenarios pass on `develop`.
+1. QA confirms all P0 scenarios pass on `main`.
 2. Mo approves DoD checklist.
-3. Alex opens PR from `develop` → `main`; Alex + Mo must approve.
-4. Squash merge. Tag the release: `v0.x.0`.
+3. Tag the release: `v0.x.0`.
 
 ### Flow for a hotfix
 
 1. Cut branch from `main`: `git checkout -b hotfix/PERF-xxx-<slug> main`
 2. Fix, commit, push.
 3. Open PR → `main`; Alex must approve.
-4. After merge, cherry-pick or open a second PR to `develop`.
-5. Notify Mo immediately.
+4. Notify Mo immediately.
 
 ---
 
