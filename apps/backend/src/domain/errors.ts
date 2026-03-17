@@ -17,7 +17,7 @@ export function createErrorEnvelope(
   code: string,
   message: string,
   details?: unknown,
-  traceId?: string,
+  traceId?: string
 ): ErrorEnvelope {
   return {
     status,

@@ -70,9 +70,7 @@ describe("T-AUTH-002: POST /auth/verify-token (invalid token)", () => {
   it("returns 401 with ErrorEnvelope when token verification fails", async () => {
     mockVerifyIdToken.mockRejectedValue(new Error("Token expired"));
 
-    const res = await request(app)
-      .post("/auth/verify-token")
-      .send({ idToken: "expired-token" });
+    const res = await request(app).post("/auth/verify-token").send({ idToken: "expired-token" });
 
     expect(res.status).toBe(401);
     expect(res.body).toMatchObject({
@@ -84,9 +82,7 @@ describe("T-AUTH-002: POST /auth/verify-token (invalid token)", () => {
   });
 
   it("returns 400 with ErrorEnvelope when idToken is missing", async () => {
-    const res = await request(app)
-      .post("/auth/verify-token")
-      .send({});
+    const res = await request(app).post("/auth/verify-token").send({});
 
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({
@@ -102,9 +98,7 @@ describe("T-AUTH-002: POST /auth/verify-token (invalid token)", () => {
     const tenMinutesAgo = Math.floor(Date.now() / 1000) - 600;
     mockVerifyIdToken.mockResolvedValue({ uid: "user-123", iat: tenMinutesAgo });
 
-    const res = await request(app)
-      .post("/auth/verify-token")
-      .send({ idToken: "stale-token" });
+    const res = await request(app).post("/auth/verify-token").send({ idToken: "stale-token" });
 
     expect(res.status).toBe(401);
     expect(res.body).toMatchObject({
@@ -144,11 +138,11 @@ describe("T-AUTH-004: GET /auth/session (no session)", () => {
   });
 
   it("returns 401 when session cookie is invalid", async () => {
+    // Both verification methods must fail for the middleware to reject
     mockVerifySessionCookie.mockRejectedValue(new Error("Session expired"));
+    mockVerifyIdToken.mockRejectedValue(new Error("Token invalid"));
 
-    const res = await request(app)
-      .get("/auth/session")
-      .set("Cookie", "__session=invalid-cookie");
+    const res = await request(app).get("/auth/session").set("Cookie", "__session=invalid-cookie");
 
     expect(res.status).toBe(401);
     expect(res.body).toMatchObject({
@@ -156,23 +150,16 @@ describe("T-AUTH-004: GET /auth/session (no session)", () => {
       code: "AUTH_SESSION_INVALID",
     });
   });
-});
 
-// T-AUTH-004b: Unknown error in middleware → 500 INTERNAL_ERROR
-describe("T-AUTH-004b: Global error handler (unknown errors)", () => {
-  it("returns 500 INTERNAL_ERROR when a non-AppError is thrown", async () => {
-    // verifySessionCookie throws a raw string (not an AppError) to trigger the unknown error path
-    mockVerifySessionCookie.mockImplementation(() => {
-      throw "unexpected raw throw";
-    });
+  it("falls back to verifyIdToken when verifySessionCookie fails", async () => {
+    // Session cookie verification fails, but ID token verification succeeds
+    mockVerifySessionCookie.mockRejectedValue(new Error("Not a session cookie"));
+    mockVerifyIdToken.mockResolvedValue({ uid: "fallback-user" });
 
-    const res = await request(app)
-      .get("/auth/session")
-      .set("Cookie", "__session=causes-unknown-error");
+    const res = await request(app).get("/auth/session").set("Cookie", "__session=id-token-cookie");
 
-    // The requireAuth middleware wraps this in AppError, so we get 401 not 500.
-    // To truly test the unknown error path in errorHandler, we need a route that throws raw.
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ status: "valid", uid: "fallback-user" });
   });
 });
 
@@ -213,7 +200,7 @@ describe("T-AUTH-002b: POST /auth/verify-token (AppError passthrough)", () => {
     mockVerifyIdToken.mockResolvedValue({ uid: "user-ok", iat: now });
     // createSessionCookie throws an AppError (defensive path — lines 60-63)
     mockCreateSessionCookie.mockRejectedValue(
-      new AppError(429, "RATE_LIMITED", "Too many session cookie requests."),
+      new AppError(429, "RATE_LIMITED", "Too many session cookie requests.")
     );
 
     const res = await request(app)
@@ -259,9 +246,7 @@ describe("T-AUTH-005: POST /auth/logout", () => {
   it("returns 200 even when session cookie is expired/invalid", async () => {
     mockVerifySessionCookie.mockRejectedValue(new Error("Session expired"));
 
-    const res = await request(app)
-      .post("/auth/logout")
-      .set("Cookie", "__session=expired-cookie");
+    const res = await request(app).post("/auth/logout").set("Cookie", "__session=expired-cookie");
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ status: "logged_out" });

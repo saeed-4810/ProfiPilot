@@ -80,12 +80,12 @@ apps/backend/
 
 ## API endpoints
 
-| Method | Path                 | Description                                          | Auth           |
-| ------ | -------------------- | ---------------------------------------------------- | -------------- |
-| GET    | `/health`            | Liveness probe — returns `{ status: "ok" }`          | None           |
-| POST   | `/auth/verify-token` | Verify Firebase ID token, set session cookie         | Firebase token |
-| GET    | `/auth/session`      | Check session validity — returns `{ status, uid }`   | Session cookie |
-| POST   | `/auth/logout`       | Revoke refresh token, clear session cookie           | Session cookie |
+| Method | Path                 | Description                                        | Auth           |
+| ------ | -------------------- | -------------------------------------------------- | -------------- |
+| GET    | `/health`            | Liveness probe — returns `{ status: "ok" }`        | None           |
+| POST   | `/auth/verify-token` | Verify Firebase ID token, set session cookie       | Firebase token |
+| GET    | `/auth/session`      | Check session validity — returns `{ status, uid }` | Session cookie |
+| POST   | `/auth/logout`       | Revoke refresh token, clear session cookie         | Session cookie |
 
 ## Handoff notes (F1/F3/F5 touchpoints)
 

@@ -2,11 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import type { Router as RouterType } from "express";
 import { getFirebaseApp } from "../lib/firebase.js";
 import { AppError } from "../domain/errors.js";
-import {
-  VerifyTokenSchema,
-  SESSION_COOKIE_NAME,
-  SESSION_EXPIRY_MS,
-} from "../domain/auth.js";
+import { VerifyTokenSchema, SESSION_COOKIE_NAME, SESSION_EXPIRY_MS } from "../domain/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 
 export const authRouter: RouterType = Router();
@@ -21,9 +17,7 @@ authRouter.post(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const parsed = VerifyTokenSchema.safeParse(req.body);
     if (!parsed.success) {
-      next(
-        new AppError(400, "VALIDATION_ERROR", "Invalid request body.", parsed.error.flatten()),
-      );
+      next(new AppError(400, "VALIDATION_ERROR", "Invalid request body.", parsed.error.flatten()));
       return;
     }
 
@@ -63,7 +57,7 @@ authRouter.post(
       }
       next(new AppError(401, "AUTH_TOKEN_INVALID", "Firebase ID token is invalid or expired."));
     }
-  },
+  }
 );
 
 /**
@@ -71,14 +65,10 @@ authRouter.post(
  * CTR-002: Check session validity.
  * Per ADR-010 step 3: Server validates session cookie on each request.
  */
-authRouter.get(
-  "/session",
-  requireAuth,
-  (req: Request, res: Response): void => {
-    const uid = (req as Request & { uid: string }).uid;
-    res.status(200).json({ status: "valid", uid });
-  },
-);
+authRouter.get("/session", requireAuth, (req: Request, res: Response): void => {
+  const uid = (req as Request & { uid: string }).uid;
+  res.status(200).json({ status: "valid", uid });
+});
 
 /**
  * POST /auth/logout
@@ -88,7 +78,9 @@ authRouter.get(
 authRouter.post(
   "/logout",
   async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
-    const sessionCookie = (req.cookies as Record<string, string> | undefined)?.[SESSION_COOKIE_NAME];
+    const sessionCookie = (req.cookies as Record<string, string> | undefined)?.[
+      SESSION_COOKIE_NAME
+    ];
 
     // Clear the cookie regardless of whether verification succeeds
     res.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
@@ -109,5 +101,5 @@ authRouter.post(
       // Cookie was invalid/expired — still clear it and return success
       res.status(200).json({ status: "logged_out" });
     }
-  },
+  }
 );

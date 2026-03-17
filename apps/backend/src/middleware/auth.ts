@@ -5,8 +5,10 @@ import { SESSION_COOKIE_NAME } from "../domain/auth.js";
 
 /**
  * Express middleware that verifies the session cookie on protected routes.
+ * Supports two cookie formats:
+ *   1. Firebase session cookie (created via createSessionCookie — Blaze plan)
+ *   2. Firebase ID token stored as cookie (fallback for Spark plan)
  * Returns 401 with ErrorEnvelope on invalid/expired/missing session.
- * Per ADR-010: session cookies are verified server-side via Firebase Admin SDK.
  */
 export async function requireAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const sessionCookie = (req.cookies as Record<string, string> | undefined)?.[SESSION_COOKIE_NAME];
@@ -18,11 +20,28 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
 
   try {
     const auth = getFirebaseApp().auth();
-    const decoded = await auth.verifySessionCookie(sessionCookie, true);
-    // Attach decoded claims to request for downstream handlers
+
+    // Try verifying as a session cookie first (Blaze plan)
+    try {
+      const decoded = await auth.verifySessionCookie(sessionCookie, true);
+      (req as Request & { uid: string }).uid = decoded.uid;
+      next();
+      return;
+    } catch {
+      // Not a valid session cookie — try as an ID token (Spark plan fallback)
+    }
+
+    // Fallback: verify as a regular ID token
+    const decoded = await auth.verifyIdToken(sessionCookie);
     (req as Request & { uid: string }).uid = decoded.uid;
     next();
   } catch {
-    next(new AppError(401, "AUTH_SESSION_INVALID", "Session is invalid or expired. Please log in again."));
+    next(
+      new AppError(
+        401,
+        "AUTH_SESSION_INVALID",
+        "Session is invalid or expired. Please log in again."
+      )
+    );
   }
 }

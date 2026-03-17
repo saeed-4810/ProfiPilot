@@ -11,7 +11,7 @@ export function errorHandler(
   err: unknown,
   _req: Request,
   res: Response<ErrorEnvelope>,
-  _next: NextFunction,
+  _next: NextFunction
 ): void {
   if (err instanceof AppError) {
     res.status(err.envelope.status).json(err.envelope);
@@ -21,7 +21,7 @@ export function errorHandler(
   const envelope = createErrorEnvelope(
     500,
     "INTERNAL_ERROR",
-    "An unexpected error occurred. Please try again later.",
+    "An unexpected error occurred. Please try again later."
   );
   res.status(500).json(envelope);
 }
