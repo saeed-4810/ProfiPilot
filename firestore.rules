@@ -1,0 +1,17 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Audits collection — server-side only via Admin SDK.
+    // No client-side reads/writes allowed (all access goes through the backend API).
+    match /audits/{auditId} {
+      allow read, write: if false;
+    }
+
+    // Default deny — no other collections accessible.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
