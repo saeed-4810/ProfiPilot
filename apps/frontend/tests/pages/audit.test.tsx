@@ -791,8 +791,8 @@ describe("Cleanup on unmount during active polling", () => {
 /* ================================================================== */
 
 describe("getStatusMessage", () => {
-  it("is exported and returns correct copy for each status", async () => {
-    const { getStatusMessage } = await import("../../app/audit/page");
+  it("is exported from lib/audit and returns correct copy for each status", async () => {
+    const { getStatusMessage } = await import("../../lib/audit");
     expect(getStatusMessage("queued")).toBe("Audit queued. Preparing run...");
     expect(getStatusMessage("running")).toBe("Audit running. This can take a moment.");
     expect(getStatusMessage("retrying")).toBe("Temporary issue. Retrying automatically...");

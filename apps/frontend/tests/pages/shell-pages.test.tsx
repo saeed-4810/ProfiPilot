@@ -12,6 +12,17 @@ vi.mock("@/lib/auth", () => ({
   getAuthErrorMessage: () => "An unexpected error occurred.",
 }));
 
+// Mock audit lib for AuditPage
+vi.mock("@/lib/audit", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    createAudit: vi.fn(),
+    getAuditStatus: vi.fn(),
+    isTerminalStatus: () => false,
+  };
+});
+
 import LoginPage from "../../app/(auth)/login/page";
 import DashboardPage from "../../app/dashboard/page";
 import AuditPage from "../../app/audit/page";
