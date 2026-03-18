@@ -8,12 +8,13 @@ import { test, expect } from "@playwright/test";
  */
 
 test.describe("Export flow — /export", () => {
-  // E-EXPORT-001: Export page renders without errors
+  // E-EXPORT-001: Export route is protected — unauthenticated access redirects to /login.
+  // Full page content tests require authenticated session (Firebase user + __session cookie).
   test("E-EXPORT-001 — export page renders with heading", async ({ page }) => {
     await page.goto("/export");
     await expect(page).toHaveTitle(/PrefPilot/);
-    await expect(page.getByTestId("export-page")).toBeVisible();
-    await expect(page.getByRole("heading", { name: /Export/i })).toBeVisible();
+    // Middleware redirects to /login without __session cookie (per PERF-115)
+    await expect(page).toHaveURL(/\/login/);
   });
 
   // E-EXPORT-002: Export page returns 200 (no 404/500)

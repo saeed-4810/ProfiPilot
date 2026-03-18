@@ -8,12 +8,13 @@ import { test, expect } from "@playwright/test";
  */
 
 test.describe("Results flow — /results", () => {
-  // E-RESULTS-001: Results page renders without errors
+  // E-RESULTS-001: Results route is protected — unauthenticated access redirects to /login.
+  // Full page content tests require authenticated session (Firebase user + __session cookie).
   test("E-RESULTS-001 — results page renders with heading", async ({ page }) => {
     await page.goto("/results");
     await expect(page).toHaveTitle(/PrefPilot/);
-    await expect(page.getByTestId("results-page")).toBeVisible();
-    await expect(page.getByRole("heading", { name: /Results/i })).toBeVisible();
+    // Middleware redirects to /login without __session cookie (per PERF-115)
+    await expect(page).toHaveURL(/\/login/);
   });
 
   // E-RESULTS-002: Results page returns 200 (no 404/500)
