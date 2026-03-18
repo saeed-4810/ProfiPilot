@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import { healthHandler } from "./routes/health.js";
 import { authRouter } from "./routes/auth.js";
 import { auditRouter } from "./routes/audit.js";
+import { projectRouter } from "./routes/project.js";
 import { errorHandler } from "./middleware/error.js";
 
 export const app: Express = express();
@@ -24,6 +25,7 @@ app.use(cookieParser());
 app.get("/health", healthHandler);
 app.use("/auth", authRouter);
 app.use("/audits", auditRouter);
+app.use("/api/v1/projects", projectRouter);
 
 // Global error handler — must be registered after all routes (ADR-003)
 app.use(errorHandler);
