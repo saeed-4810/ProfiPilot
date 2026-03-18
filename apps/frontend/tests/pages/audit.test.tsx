@@ -21,7 +21,7 @@ vi.mock("@/lib/audit", async (importOriginal) => {
 });
 
 // Import after mocks
-import AuditPage from "../../app/audit/page";
+import AuditPage from "../../app/(authenticated)/audit/page";
 
 beforeEach(() => {
   vi.clearAllMocks();

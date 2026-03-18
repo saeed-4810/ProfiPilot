@@ -24,10 +24,10 @@ vi.mock("@/lib/audit", async (importOriginal) => {
 });
 
 import LoginPage from "../../app/(auth)/login/page";
-import DashboardPage from "../../app/dashboard/page";
-import AuditPage from "../../app/audit/page";
-import ResultsPage from "../../app/results/page";
-import ExportPage from "../../app/export/page";
+import DashboardPage from "../../app/(authenticated)/dashboard/page";
+import AuditPage from "../../app/(authenticated)/audit/page";
+import ResultsPage from "../../app/(authenticated)/results/page";
+import ExportPage from "../../app/(authenticated)/export/page";
 
 beforeEach(() => {
   Object.defineProperty(window, "matchMedia", {
