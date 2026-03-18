@@ -49,7 +49,7 @@ const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
 /* Import after mocks */
-import { AuthProvider, useAuth } from "../../lib/auth";
+import { AuthProvider, useAuth, getAuthErrorMessage } from "../../lib/auth";
 
 /* ------------------------------------------------------------------ */
 /* Test helper — renders a consumer that displays auth state           */
@@ -404,5 +404,83 @@ describe("useAuth outside AuthProvider", () => {
     }).toThrow("useAuth must be used within an AuthProvider");
 
     consoleSpy.mockRestore();
+  });
+});
+
+/* ================================================================== */
+/* getAuthErrorMessage — Firebase error code mapping                    */
+/* ================================================================== */
+
+describe("getAuthErrorMessage", () => {
+  it("returns mapped message for auth/invalid-credential", () => {
+    const err = Object.assign(new Error("Firebase: Error"), { code: "auth/invalid-credential" });
+    expect(getAuthErrorMessage(err)).toBe("Invalid email or password. Please try again.");
+  });
+
+  it("returns mapped message for auth/user-not-found", () => {
+    const err = Object.assign(new Error("Firebase: Error"), { code: "auth/user-not-found" });
+    expect(getAuthErrorMessage(err)).toBe("No account found with this email address.");
+  });
+
+  it("returns mapped message for auth/wrong-password", () => {
+    const err = Object.assign(new Error("Firebase: Error"), { code: "auth/wrong-password" });
+    expect(getAuthErrorMessage(err)).toBe("Incorrect password. Please try again.");
+  });
+
+  it("returns mapped message for auth/too-many-requests", () => {
+    const err = Object.assign(new Error("Firebase: Error"), { code: "auth/too-many-requests" });
+    expect(getAuthErrorMessage(err)).toBe("Too many attempts. Please wait and try again.");
+  });
+
+  it("returns mapped message for auth/network-request-failed", () => {
+    const err = Object.assign(new Error("Firebase: Error"), {
+      code: "auth/network-request-failed",
+    });
+    expect(getAuthErrorMessage(err)).toBe("Network error. Check your connection and try again.");
+  });
+
+  it("returns mapped message for auth/invalid-email", () => {
+    const err = Object.assign(new Error("Firebase: Error"), { code: "auth/invalid-email" });
+    expect(getAuthErrorMessage(err)).toBe("Please enter a valid email address.");
+  });
+
+  it("returns mapped message for auth/user-disabled", () => {
+    const err = Object.assign(new Error("Firebase: Error"), { code: "auth/user-disabled" });
+    expect(getAuthErrorMessage(err)).toBe("This account has been disabled. Contact support.");
+  });
+
+  it("returns mapped message for auth/email-already-in-use", () => {
+    const err = Object.assign(new Error("Firebase: Error"), {
+      code: "auth/email-already-in-use",
+    });
+    expect(getAuthErrorMessage(err)).toBe("An account with this email already exists.");
+  });
+
+  it("returns error.message for non-Firebase errors with message", () => {
+    const err = new Error("Failed to verify session with server.");
+    expect(getAuthErrorMessage(err)).toBe("Failed to verify session with server.");
+  });
+
+  it("returns default message for Firebase-prefixed errors without known code", () => {
+    const err = Object.assign(new Error("Firebase: some unknown error"), {
+      code: "auth/unknown-code",
+    });
+    // Firebase-prefixed messages with unknown codes fall through to default
+    expect(getAuthErrorMessage(err)).toBe("An unexpected error occurred. Please try again.");
+  });
+
+  it("returns default message for non-Error values", () => {
+    expect(getAuthErrorMessage("string error")).toBe(
+      "An unexpected error occurred. Please try again."
+    );
+  });
+
+  it("returns default message for null", () => {
+    expect(getAuthErrorMessage(null)).toBe("An unexpected error occurred. Please try again.");
+  });
+
+  it("returns default message for Error with empty message and Firebase prefix", () => {
+    const err = Object.assign(new Error(""), { code: "auth/unknown-code" });
+    expect(getAuthErrorMessage(err)).toBe("An unexpected error occurred. Please try again.");
   });
 });

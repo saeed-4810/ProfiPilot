@@ -3,18 +3,28 @@ import { test, expect } from "@playwright/test";
 /**
  * E2E scenarios for the Authentication flow (PERF-98) and App Shell (PERF-115).
  *
- * Shell tests (E-AUTH-001, E-AUTH-002) run now against the scaffold.
- * Feature tests (E-AUTH-003, E-AUTH-004) are stubs — implement when PERF-98 is in progress.
- * App shell tests (E-SHELL-001, E-SHELL-002) verify route protection and navigation.
+ * E-AUTH-001, E-AUTH-002: Active — login page renders correctly.
+ * E-AUTH-003, E-AUTH-004: fixme — require Firebase test user + backend running.
+ *   The login form is implemented (PERF-98), but E2E auth requires:
+ *   1. A Firebase test user account in the dev project
+ *   2. Backend running with POST /auth/verify-token endpoint
+ *   3. Playwright auth state fixture for session cookie
+ *   These will be activated when the backend auth endpoints are deployed.
+ * E-SHELL-001: Active — middleware redirects unauthenticated users.
+ * E-SHELL-002: fixme — requires authenticated session setup.
  */
 
 test.describe("Auth flow — /login", () => {
   // E-AUTH-001: Login page renders without errors
-  test("E-AUTH-001 — login page renders with heading", async ({ page }) => {
+  test("E-AUTH-001 — login page renders with heading and form", async ({ page }) => {
     await page.goto("/login");
     await expect(page).toHaveTitle(/PrefPilot/);
     await expect(page.getByTestId("login-page")).toBeVisible();
     await expect(page.getByRole("heading", { name: /Sign in to PrefPilot/i })).toBeVisible();
+    // PERF-98: Login form is now implemented
+    await expect(page.getByTestId("login-email-input")).toBeVisible();
+    await expect(page.getByTestId("login-password-input")).toBeVisible();
+    await expect(page.getByTestId("login-submit")).toBeVisible();
   });
 
   // E-AUTH-002: Login page returns 200 (no 404/500)
@@ -24,16 +34,26 @@ test.describe("Auth flow — /login", () => {
   });
 
   // E-AUTH-003: User signs in with valid Firebase credentials → redirects to /dashboard
-  test.fixme("E-AUTH-003 — valid sign-in redirects to /dashboard (PERF-98)", async ({ page }) => {
+  test.fixme("E-AUTH-003 — valid sign-in redirects to /dashboard (requires Firebase test user + backend)", async ({
+    page,
+  }) => {
     await page.goto("/login");
-    // TODO(PERF-98): fill email + password, click submit, assert redirect
+    // Requires: Firebase test user, backend /auth/verify-token endpoint running
+    await page.getByTestId("login-email-input").fill("testuser@example.com");
+    await page.getByTestId("login-password-input").fill("testpassword123");
+    await page.getByTestId("login-submit").click();
     await expect(page).toHaveURL("/dashboard");
   });
 
   // E-AUTH-004: Invalid credentials show error message
-  test.fixme("E-AUTH-004 — invalid credentials show error message (PERF-98)", async ({ page }) => {
+  test.fixme("E-AUTH-004 — invalid credentials show error message (requires Firebase backend)", async ({
+    page,
+  }) => {
     await page.goto("/login");
-    // TODO(PERF-98): fill invalid credentials, click submit, assert error banner
+    // Requires: Firebase backend running to reject invalid credentials
+    await page.getByTestId("login-email-input").fill("invalid@example.com");
+    await page.getByTestId("login-password-input").fill("wrongpassword");
+    await page.getByTestId("login-submit").click();
     await expect(page.getByRole("alert")).toBeVisible();
   });
 });
@@ -50,8 +70,7 @@ test.describe("App Shell — route protection (PERF-115)", () => {
   test.fixme("E-SHELL-002 — navigation renders on authenticated pages (requires auth setup)", async ({
     page,
   }) => {
-    // TODO(PERF-98): Set up authenticated session (Firebase + __session cookie)
-    // then verify navigation is visible
+    // Requires: authenticated session (Firebase + __session cookie)
     await page.goto("/dashboard");
     await expect(page.getByTestId("navigation")).toBeVisible();
   });
