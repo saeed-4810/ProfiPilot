@@ -18,6 +18,8 @@ test.describe("Auth flow — /login", () => {
   // E-AUTH-001: Login page renders without errors
   test("E-AUTH-001 — login page renders with heading and form", async ({ page }) => {
     await page.goto("/login");
+    // Wait for page to fully load before assertions (CI can be slow on first load)
+    await page.waitForLoadState("domcontentloaded");
     await expect(page).toHaveTitle(/PrefPilot/);
     await expect(page.getByTestId("login-page")).toBeVisible();
     await expect(page.getByRole("heading", { name: /Sign in to PrefPilot/i })).toBeVisible();
