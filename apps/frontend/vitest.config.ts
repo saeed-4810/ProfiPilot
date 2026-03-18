@@ -11,15 +11,15 @@ export default defineConfig({
     include: ["tests/**/*.test.{ts,tsx}"],
     coverage: {
       provider: "v8",
-      include: ["app/**", "components/**", "lib/**"],
+      include: ["app/**", "components/**", "lib/**", "middleware.ts"],
       exclude: [
         "app/layout.tsx", // Root layout — metadata export, no testable logic
         "app/page.tsx", // Root redirect — no testable logic
         "app/globals.css", // CSS file
-        // app/audit/** — removed: PERF-100 implemented
-        "app/dashboard/**", // Shell placeholder — not implemented yet
-        "app/results/**", // Shell placeholder — not implemented yet
-        "app/export/**", // Shell placeholder — not implemented yet
+        // app/(authenticated)/audit/** — PERF-100 implemented, tested in tests/pages/audit.test.tsx
+        "app/(authenticated)/dashboard/**", // Shell placeholder — not implemented yet
+        "app/(authenticated)/results/**", // Shell placeholder — not implemented yet
+        "app/(authenticated)/export/**", // Shell placeholder — not implemented yet
       ],
       thresholds: {
         statements: 100,

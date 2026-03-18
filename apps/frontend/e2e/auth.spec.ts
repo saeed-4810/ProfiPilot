@@ -1,10 +1,11 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * E2E scenarios for the Authentication flow (PERF-98).
+ * E2E scenarios for the Authentication flow (PERF-98) and App Shell (PERF-115).
  *
  * Shell tests (E-AUTH-001, E-AUTH-002) run now against the scaffold.
  * Feature tests (E-AUTH-003, E-AUTH-004) are stubs — implement when PERF-98 is in progress.
+ * App shell tests (E-SHELL-001, E-SHELL-002) verify route protection and navigation.
  */
 
 test.describe("Auth flow — /login", () => {
@@ -34,5 +35,24 @@ test.describe("Auth flow — /login", () => {
     await page.goto("/login");
     // TODO(PERF-98): fill invalid credentials, click submit, assert error banner
     await expect(page.getByRole("alert")).toBeVisible();
+  });
+});
+
+test.describe("App Shell — route protection (PERF-115)", () => {
+  // E-SHELL-001: Unauthenticated /dashboard redirects to /login
+  test("E-SHELL-001 — unauthenticated /dashboard redirects to /login", async ({ page }) => {
+    await page.goto("/dashboard");
+    // Middleware should redirect to /login when no __session cookie
+    await expect(page).toHaveURL(/\/login/);
+  });
+
+  // E-SHELL-002: Navigation renders on authenticated pages
+  test.fixme("E-SHELL-002 — navigation renders on authenticated pages (requires auth setup)", async ({
+    page,
+  }) => {
+    // TODO(PERF-98): Set up authenticated session (Firebase + __session cookie)
+    // then verify navigation is visible
+    await page.goto("/dashboard");
+    await expect(page.getByTestId("navigation")).toBeVisible();
   });
 });

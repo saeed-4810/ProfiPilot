@@ -6,7 +6,7 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "test": "vitest run",
-    "lint": "eslint app components tests --max-warnings=0",
+    "lint": "eslint app components lib tests middleware.ts --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .next dist out",
     "e2e": "playwright test",
