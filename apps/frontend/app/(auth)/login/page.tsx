@@ -115,10 +115,10 @@ export default function LoginPage() {
         setPageState("success");
         router.push("/dashboard");
 
-        /* Fallback: if redirect doesn't complete within 5s, show error */
+        /* Fallback: if redirect doesn't complete within 5s, show error with retry */
         setTimeout(() => {
           setPageState("error");
-          setError("Redirect timed out. Please try again or go to the dashboard manually.");
+          setError("Redirect failed. Please try again.");
         }, 5000);
       } catch (err: unknown) {
         /* P-PERF-98-002: Invalid credentials → error shown */
@@ -156,9 +156,17 @@ export default function LoginPage() {
               role="alert"
               tabIndex={-1}
               data-testid="login-error"
-              className="mb-4 p-3 rounded bg-red-900/50 border border-red-500 text-red-200 text-sm"
+              className="mb-4 p-3 rounded bg-red-900/50 border border-red-500 text-red-200 text-sm flex items-center justify-between gap-2"
             >
-              {error}
+              <span>{error}</span>
+              <button
+                type="button"
+                data-testid="login-retry"
+                onClick={() => window.location.reload()}
+                className="shrink-0 rounded px-2 py-1 text-xs font-medium bg-red-800 hover:bg-red-700 text-red-100"
+              >
+                Try again
+              </button>
             </div>
           )}
 

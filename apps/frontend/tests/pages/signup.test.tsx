@@ -57,7 +57,13 @@ beforeEach(() => {
   mockSignUp.mockReset();
   mockUser = null;
   mockAuthLoading = false;
+  Object.defineProperty(window, "location", {
+    value: { ...window.location, reload: mockReload },
+    writable: true,
+  });
 });
+
+const mockReload = vi.fn();
 
 async function fillAndSubmit(
   user: ReturnType<typeof userEvent.setup>,
@@ -120,7 +126,8 @@ describe("P-PERF-124-001: New user creates account with valid email and password
     vi.advanceTimersByTime(5100);
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("Redirect timed out");
+      expect(screen.getByRole("alert")).toHaveTextContent("Redirect failed");
+      expect(screen.getByTestId("signup-retry")).toBeInTheDocument();
       expect(screen.getByTestId("signup-form")).toBeInTheDocument();
     });
 
@@ -238,7 +245,25 @@ describe("U-PERF-124-001: Signup form shows loading state on submit", () => {
 /* ================================================================== */
 
 describe("U-PERF-124-002: Signup form shows error banner on failure", () => {
-  it("renders accessible error alert with role=alert", async () => {
+  it("retry button calls window.location.reload", async () => {
+    mockSignUp.mockRejectedValue(
+      Object.assign(new Error("Firebase: Error"), { code: "auth/email-already-in-use" })
+    );
+
+    const user = userEvent.setup();
+    render(<SignupPage />);
+
+    await fillAndSubmit(user, "existing@example.com", "password123", "password123");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("signup-retry")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("signup-retry"));
+    expect(mockReload).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders accessible error alert with role=alert and retry button", async () => {
     mockSignUp.mockRejectedValue(
       Object.assign(new Error("Firebase: Error"), { code: "auth/email-already-in-use" })
     );
@@ -252,6 +277,8 @@ describe("U-PERF-124-002: Signup form shows error banner on failure", () => {
       const alert = screen.getByRole("alert");
       expect(alert).toBeInTheDocument();
       expect(alert).toHaveAttribute("data-testid", "signup-error");
+      expect(screen.getByTestId("signup-retry")).toBeInTheDocument();
+      expect(screen.getByTestId("signup-retry")).toHaveTextContent("Try again");
     });
   });
 
