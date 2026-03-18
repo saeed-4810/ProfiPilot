@@ -105,6 +105,30 @@ describe("P-PERF-98-001: User with valid Firebase credentials signs in", () => {
     });
   });
 
+  it("shows error after 5s if redirect does not complete", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockSignIn.mockResolvedValue(undefined);
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<LoginPage />);
+
+    await fillAndSubmit(user, "test@example.com", "password123");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("login-success")).toBeInTheDocument();
+    });
+
+    // Advance past the 5s timeout
+    vi.advanceTimersByTime(5100);
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Redirect timed out");
+      expect(screen.getByTestId("login-form")).toBeInTheDocument();
+    });
+
+    vi.useRealTimers();
+  });
+
   it("redirects to /dashboard if user is already authenticated", () => {
     mockUser = { email: "test@example.com", uid: "123" };
     render(<LoginPage />);

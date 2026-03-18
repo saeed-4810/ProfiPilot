@@ -104,6 +104,29 @@ describe("P-PERF-124-001: New user creates account with valid email and password
     });
   });
 
+  it("shows error after 5s if redirect does not complete", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockSignUp.mockResolvedValue(undefined);
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<SignupPage />);
+
+    await fillAndSubmit(user, "new@example.com", "password123", "password123");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("signup-success")).toBeInTheDocument();
+    });
+
+    vi.advanceTimersByTime(5100);
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Redirect timed out");
+      expect(screen.getByTestId("signup-form")).toBeInTheDocument();
+    });
+
+    vi.useRealTimers();
+  });
+
   it("redirects to /dashboard if user is already authenticated", () => {
     mockUser = { email: "test@example.com", uid: "123" };
     render(<SignupPage />);

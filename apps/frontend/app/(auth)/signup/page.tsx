@@ -134,6 +134,12 @@ export default function SignupPage() {
         /* Success — auto sign-in happened, redirect to dashboard */
         setPageState("success");
         router.push("/dashboard");
+
+        /* Fallback: if redirect doesn't complete within 5s, show error */
+        setTimeout(() => {
+          setPageState("error");
+          setError("Redirect timed out. Please try again or go to the dashboard manually.");
+        }, 5000);
       } catch (err: unknown) {
         /* P-PERF-124-002 / P-PERF-124-003: Error shown */
         /* U-PERF-124-002: Error banner with role="alert" */

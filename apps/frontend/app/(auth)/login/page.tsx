@@ -114,6 +114,12 @@ export default function LoginPage() {
         /* Success — redirect to dashboard */
         setPageState("success");
         router.push("/dashboard");
+
+        /* Fallback: if redirect doesn't complete within 5s, show error */
+        setTimeout(() => {
+          setPageState("error");
+          setError("Redirect timed out. Please try again or go to the dashboard manually.");
+        }, 5000);
       } catch (err: unknown) {
         /* P-PERF-98-002: Invalid credentials → error shown */
         /* U-PERF-98-002: Error banner with role="alert" */
