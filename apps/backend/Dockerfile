@@ -33,7 +33,9 @@ COPY --from=builder /app/apps/backend/package.json ./apps/backend/
 COPY --from=builder /app/apps/frontend/package.json ./apps/frontend/
 COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
 
-RUN pnpm install --frozen-lockfile --prod
+# HUSKY=0 disables the "prepare" lifecycle script which runs husky (a devDependency).
+# Without this, --prod install fails because husky is not available.
+RUN HUSKY=0 pnpm install --frozen-lockfile --prod
 
 ENV NODE_ENV=production
 ENV PORT=3001
