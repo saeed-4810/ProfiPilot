@@ -31,3 +31,38 @@ test.describe("Dashboard flow — /dashboard", () => {
     await expect(page.getByTestId("project-list")).toBeVisible();
   });
 });
+
+/**
+ * E2E scenarios for the Project + URL CRUD flow (PERF-116).
+ *
+ * These are test.fixme stubs — activate when the frontend project
+ * creation and URL management UI is implemented.
+ * Backend API contracts verified in apps/backend/tests/project.test.ts.
+ */
+test.describe("Project + URL CRUD flow — PERF-116", () => {
+  // E-PROJ-001: Project creation flow renders and submits
+  test.fixme("E-PROJ-001 — project creation form visible, submit creates project, redirects to detail", async ({
+    page,
+  }) => {
+    await page.goto("/dashboard");
+    // TODO(PERF-116 frontend): click "Create project" CTA, fill name, submit
+    await expect(page.getByTestId("create-project-form")).toBeVisible();
+    await page.getByTestId("project-name-input").fill("My Test Project");
+    await page.getByTestId("create-project-submit").click();
+    // Expect redirect to project detail page
+    await expect(page).toHaveURL(/\/projects\//);
+  });
+
+  // E-PROJ-002: URL addition flow validates and saves
+  test.fixme("E-PROJ-002 — URL input validates format, submit stores URL, list updates", async ({
+    page,
+  }) => {
+    await page.goto("/dashboard");
+    // TODO(PERF-116 frontend): navigate to a project, add URL
+    await expect(page.getByTestId("add-url-input")).toBeVisible();
+    await page.getByTestId("add-url-input").fill("https://example.com");
+    await page.getByTestId("add-url-submit").click();
+    // Expect URL appears in the list
+    await expect(page.getByText("https://example.com")).toBeVisible();
+  });
+});
