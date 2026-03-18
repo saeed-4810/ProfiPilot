@@ -18,6 +18,7 @@ let mockAuthLoading = false;
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({
     signIn: mockSignIn,
+    signUp: vi.fn(),
     signOut: vi.fn(),
     getIdToken: vi.fn(),
     user: mockUser,
