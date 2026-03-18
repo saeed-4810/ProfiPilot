@@ -33,9 +33,10 @@ COPY --from=builder /app/apps/backend/package.json ./apps/backend/
 COPY --from=builder /app/apps/frontend/package.json ./apps/frontend/
 COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
 
-# HUSKY=0 disables the "prepare" lifecycle script which runs husky (a devDependency).
-# Without this, --prod install fails because husky is not available.
-RUN HUSKY=0 pnpm install --frozen-lockfile --prod
+# --ignore-scripts skips all lifecycle scripts (prepare, postinstall, etc.).
+# The root "prepare" script runs "husky" which is a devDependency — not available
+# with --prod. Safe to skip all scripts in the production runtime container.
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 ENV NODE_ENV=production
 ENV PORT=3001
