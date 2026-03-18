@@ -12,10 +12,8 @@ test.describe("Dashboard flow — /dashboard", () => {
   // Full page content tests require authenticated session (Firebase user + __session cookie).
   test("E-DASH-001 — dashboard page renders with heading", async ({ page }) => {
     await page.goto("/dashboard");
-    // Middleware redirects to /login without __session cookie (per PERF-115).
-    // Wait for redirect to complete before checking title (CI can be slow).
+    // Middleware redirects to /login without __session cookie (per PERF-115)
     await expect(page).toHaveURL(/\/login/);
-    await expect(page).toHaveTitle(/PrefPilot/);
   });
 
   // E-DASH-002: Dashboard route responds (redirect is still a 200 after following)

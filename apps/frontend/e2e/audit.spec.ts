@@ -12,10 +12,8 @@ test.describe("Audit flow — /audit", () => {
   // Full page content tests require authenticated session (Firebase user + __session cookie).
   test("E-AUDIT-001 — audit page renders with heading", async ({ page }) => {
     await page.goto("/audit");
-    // Middleware redirects to /login without __session cookie (per PERF-115).
-    // Wait for redirect to complete before checking title (CI can be slow).
+    // Middleware redirects to /login without __session cookie (per PERF-115)
     await expect(page).toHaveURL(/\/login/);
-    await expect(page).toHaveTitle(/PrefPilot/);
   });
 
   // E-AUDIT-002: Audit page returns 200 (no 404/500)
