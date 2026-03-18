@@ -4,6 +4,11 @@ import request from "supertest";
 process.env["NODE_ENV"] = "test";
 process.env["FIREBASE_PROJECT_ID"] = "test-project";
 
+// --- Audit worker mock (fire-and-forget — prevent real PSI calls) ---
+vi.mock("../src/services/audit-worker.js", () => ({
+  processAuditJob: vi.fn().mockResolvedValue(undefined),
+}));
+
 // --- Firebase Admin mock ---
 const mockVerifySessionCookie = vi.fn();
 const mockVerifyIdToken = vi.fn();
@@ -300,6 +305,82 @@ describe("Adapter: updateAuditStatus", () => {
     expect(updateArg["retryCount"]).toBe(2);
     expect(updateArg["nextRetryAt"]).toBe("2026-03-17T02:00:00.000Z");
     expect(updateArg["completedAt"]).toBeUndefined();
+  });
+});
+
+// Adapter unit tests: createAuditJob with strategy
+describe("Adapter: createAuditJob strategy", () => {
+  it("includes strategy field in the created job document", async () => {
+    mockSet.mockResolvedValue(undefined);
+    const { createAuditJob } = await import("../src/adapters/firestore-audit.js");
+
+    const job = await createAuditJob("user-123", "https://example.com", "desktop");
+
+    expect(job.strategy).toBe("desktop");
+    expect(mockSet).toHaveBeenCalledOnce();
+    const setArg = mockSet.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(setArg["strategy"]).toBe("desktop");
+  });
+
+  it("defaults strategy to mobile when not specified", async () => {
+    mockSet.mockResolvedValue(undefined);
+    const { createAuditJob } = await import("../src/adapters/firestore-audit.js");
+
+    const job = await createAuditJob("user-123", "https://example.com");
+
+    expect(job.strategy).toBe("mobile");
+  });
+});
+
+// Adapter unit tests: getAuditJob strategy default
+describe("Adapter: getAuditJob strategy default", () => {
+  it("defaults strategy to mobile for pre-ADR-012 documents", async () => {
+    mockGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        jobId: "job-old",
+        uid: "user-123",
+        url: "https://example.com",
+        status: "queued",
+        retryCount: 0,
+        createdAt: "2026-03-17T00:00:00.000Z",
+        updatedAt: "2026-03-17T00:00:00.000Z",
+        // No strategy field — pre-ADR-012 document
+      }),
+    });
+
+    const { getAuditJob } = await import("../src/adapters/firestore-audit.js");
+    const job = await getAuditJob("job-old");
+
+    expect(job?.strategy).toBe("mobile");
+  });
+});
+
+// Adapter unit tests: updateAuditMetrics coverage
+describe("Adapter: updateAuditMetrics", () => {
+  it("writes metrics and updatedAt to Firestore", async () => {
+    mockUpdate.mockResolvedValue(undefined);
+    const { updateAuditMetrics } = await import("../src/adapters/firestore-audit.js");
+
+    const metrics = {
+      lcp: 2500,
+      cls: 0.05,
+      tbt: 150,
+      fcp: 1200,
+      ttfb: 400,
+      si: 3000,
+      performanceScore: 0.85,
+      lighthouseVersion: "12.0.0",
+      fieldData: null,
+      fetchedAt: "2026-03-18T12:00:00.000Z",
+    };
+
+    await updateAuditMetrics("job-abc", metrics);
+
+    expect(mockUpdate).toHaveBeenCalledOnce();
+    const updateArg = mockUpdate.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(updateArg["metrics"]).toEqual(metrics);
+    expect(updateArg["updatedAt"]).toBeDefined();
   });
 });
 

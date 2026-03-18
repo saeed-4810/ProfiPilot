@@ -1,11 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { getFirebaseApp } from "../lib/firebase.js";
-import { AuditStatus, AuditJobSchema, type AuditJob } from "../domain/audit.js";
+import {
+  AuditStatus,
+  AuditJobSchema,
+  type AuditJob,
+  type AuditMetrics,
+  type AuditStrategy,
+} from "../domain/audit.js";
 
 const COLLECTION = "audits";
 
 /** Create a new audit job document in Firestore. Returns the created AuditJob. */
-export async function createAuditJob(uid: string, url: string): Promise<AuditJob> {
+export async function createAuditJob(
+  uid: string,
+  url: string,
+  strategy: AuditStrategy = "mobile"
+): Promise<AuditJob> {
   const firestore = getFirebaseApp().firestore();
   const jobId = randomUUID();
   const now = new Date().toISOString();
@@ -15,6 +25,7 @@ export async function createAuditJob(uid: string, url: string): Promise<AuditJob
     uid,
     url,
     status: AuditStatus.QUEUED,
+    strategy,
     retryCount: 0,
     createdAt: now,
     updatedAt: now,
@@ -39,7 +50,8 @@ export async function getAuditJob(jobId: string): Promise<AuditJob | null> {
     return null;
   }
 
-  return parsed.data;
+  // Default strategy to "mobile" for pre-ADR-012 documents missing the field
+  return { ...parsed.data, strategy: parsed.data.strategy ?? "mobile" };
 }
 
 /**
@@ -76,4 +88,15 @@ export async function updateAuditStatus(
   }
 
   await firestore.collection(COLLECTION).doc(jobId).update(update);
+}
+
+/** Write parsed CWV metrics to the audit document's metrics subdocument per ADR-012. */
+export async function updateAuditMetrics(jobId: string, metrics: AuditMetrics): Promise<void> {
+  const firestore = getFirebaseApp().firestore();
+  const now = new Date().toISOString();
+
+  await firestore.collection(COLLECTION).doc(jobId).update({
+    metrics,
+    updatedAt: now,
+  });
 }
