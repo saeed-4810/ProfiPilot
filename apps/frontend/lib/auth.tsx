@@ -2,7 +2,7 @@
 
 /**
  * Auth Context Provider — tracks Firebase Auth state and provides
- * signIn / signOut / getIdToken methods to the component tree.
+ * signIn / signUp / signOut / getIdToken methods to the component tree.
  *
  * Per ADR-010 session lifecycle:
  *   1. signIn: Firebase signInWithEmailAndPassword → POST /auth/verify-token (sets __session cookie)
@@ -25,6 +25,7 @@ import {
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   type User,
 } from "firebase/auth";
@@ -46,6 +47,8 @@ export interface AuthState {
 export interface AuthContextValue extends AuthState {
   /** Sign in with email + password. Sets server-side session cookie. */
   signIn: (email: string, password: string) => Promise<void>;
+  /** Create a new account with email + password. Auto signs in and sets session cookie. */
+  signUp: (email: string, password: string) => Promise<void>;
   /** Sign out. Clears server-side session cookie and Firebase session. */
   signOut: () => Promise<void>;
   /** Get the current user's ID token (for manual API calls). */
@@ -138,6 +141,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, []);
 
+  /* --- signUp: Firebase create account → server session cookie --- */
+  const signUp = useCallback(async (email: string, password: string): Promise<void> => {
+    setState((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const auth = getFirebaseAuth();
+      const credential = await createUserWithEmailAndPassword(auth, email, password);
+      const idToken = await credential.user.getIdToken();
+
+      // POST /auth/verify-token to set __session cookie (per ADR-010)
+      const response = await fetch(`${API_BASE}/auth/verify-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ idToken }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to verify session with server.");
+      }
+
+      // onAuthStateChanged will update state with the new user
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Sign-up failed.";
+      setState((prev) => ({ ...prev, loading: false, error: message }));
+      throw err;
+    }
+  }, []);
+
   /* --- signOut: server logout → Firebase signOut --- */
   const signOut = useCallback(async (): Promise<void> => {
     try {
@@ -172,10 +203,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       loading: state.loading,
       error: state.error,
       signIn,
+      signUp,
       signOut,
       getIdToken,
     }),
-    [state.user, state.loading, state.error, signIn, signOut, getIdToken]
+    [state.user, state.loading, state.error, signIn, signUp, signOut, getIdToken]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -194,6 +226,7 @@ const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   "auth/too-many-requests": "Too many attempts. Please wait and try again.",
   "auth/network-request-failed": "Network error. Check your connection and try again.",
   "auth/email-already-in-use": "An account with this email already exists.",
+  "auth/weak-password": "Password is too weak. Use at least 6 characters.",
 };
 
 const DEFAULT_AUTH_ERROR = "An unexpected error occurred. Please try again.";

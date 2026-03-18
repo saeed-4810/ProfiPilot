@@ -10,6 +10,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({
     signIn: vi.fn(),
+    signUp: vi.fn(),
     signOut: vi.fn(),
     getIdToken: vi.fn(),
     user: null,

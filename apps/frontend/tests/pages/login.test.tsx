@@ -18,6 +18,7 @@ let mockAuthLoading = false;
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({
     signIn: mockSignIn,
+    signUp: vi.fn(),
     signOut: vi.fn(),
     getIdToken: vi.fn(),
     user: mockUser,
@@ -54,11 +55,17 @@ import LoginPage from "../../app/(auth)/login/page";
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
+const mockReload = vi.fn();
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockSignIn.mockReset();
   mockUser = null;
   mockAuthLoading = false;
+  Object.defineProperty(window, "location", {
+    value: { ...window.location, reload: mockReload },
+    writable: true,
+  });
 });
 
 async function fillAndSubmit(
@@ -102,6 +109,31 @@ describe("P-PERF-98-001: User with valid Firebase credentials signs in", () => {
       expect(screen.getByTestId("login-success")).toBeInTheDocument();
       expect(screen.getByText("Sign-in successful. Redirecting...")).toBeInTheDocument();
     });
+  });
+
+  it("shows error after 5s if redirect does not complete", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockSignIn.mockResolvedValue(undefined);
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<LoginPage />);
+
+    await fillAndSubmit(user, "test@example.com", "password123");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("login-success")).toBeInTheDocument();
+    });
+
+    // Advance past the 5s timeout
+    vi.advanceTimersByTime(5100);
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Redirect failed");
+      expect(screen.getByTestId("login-retry")).toBeInTheDocument();
+      expect(screen.getByTestId("login-form")).toBeInTheDocument();
+    });
+
+    vi.useRealTimers();
   });
 
   it("redirects to /dashboard if user is already authenticated", () => {
@@ -264,7 +296,25 @@ describe("U-PERF-98-001: Login form shows loading state on submit", () => {
 /* ================================================================== */
 
 describe("U-PERF-98-002: Login form shows error banner on failure", () => {
-  it("renders accessible error alert with role=alert", async () => {
+  it("retry button calls window.location.reload", async () => {
+    mockSignIn.mockRejectedValue(
+      Object.assign(new Error("Firebase: Error"), { code: "auth/invalid-credential" })
+    );
+
+    const user = userEvent.setup();
+    render(<LoginPage />);
+
+    await fillAndSubmit(user, "test@example.com", "wrong");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("login-retry")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("login-retry"));
+    expect(mockReload).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders accessible error alert with role=alert and retry button", async () => {
     mockSignIn.mockRejectedValue(
       Object.assign(new Error("Firebase: Error"), { code: "auth/invalid-credential" })
     );
@@ -278,6 +328,8 @@ describe("U-PERF-98-002: Login form shows error banner on failure", () => {
       const alert = screen.getByRole("alert");
       expect(alert).toBeInTheDocument();
       expect(alert).toHaveAttribute("data-testid", "login-error");
+      expect(screen.getByTestId("login-retry")).toBeInTheDocument();
+      expect(screen.getByTestId("login-retry")).toHaveTextContent("Try again");
     });
   });
 

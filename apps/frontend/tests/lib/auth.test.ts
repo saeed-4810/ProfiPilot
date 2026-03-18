@@ -19,6 +19,7 @@ let authErrorCallback: ((error: Error) => void) | null = null;
 const mockUnsubscribe = vi.fn();
 
 const mockSignInWithEmailAndPassword = vi.fn();
+const mockCreateUserWithEmailAndPassword = vi.fn();
 const mockFirebaseSignOut = vi.fn();
 const mockGetIdToken = vi.fn();
 
@@ -33,6 +34,8 @@ vi.mock("firebase/auth", () => ({
     return mockUnsubscribe;
   },
   signInWithEmailAndPassword: (...args: unknown[]) => mockSignInWithEmailAndPassword(...args),
+  createUserWithEmailAndPassword: (...args: unknown[]) =>
+    mockCreateUserWithEmailAndPassword(...args),
   signOut: (...args: unknown[]) => mockFirebaseSignOut(...args),
 }));
 
@@ -56,7 +59,7 @@ import { AuthProvider, useAuth, getAuthErrorMessage } from "../../lib/auth";
 /* ------------------------------------------------------------------ */
 
 function AuthConsumer() {
-  const { user, loading, error, signIn, signOut, getIdToken } = useAuth();
+  const { user, loading, error, signIn, signUp, signOut, getIdToken } = useAuth();
   return createElement("div", null, [
     createElement("span", { key: "loading", "data-testid": "auth-loading" }, String(loading)),
     createElement(
@@ -79,6 +82,17 @@ function AuthConsumer() {
         },
       },
       "Sign In"
+    ),
+    createElement(
+      "button",
+      {
+        key: "sign-up",
+        "data-testid": "auth-sign-up-btn",
+        onClick: () => {
+          signUp("new@example.com", "newpassword123").catch(() => {});
+        },
+      },
+      "Sign Up"
     ),
     createElement(
       "button",
@@ -408,6 +422,121 @@ describe("useAuth outside AuthProvider", () => {
 });
 
 /* ================================================================== */
+/* signUp: Firebase create account → server session cookie             */
+/* ================================================================== */
+
+describe("signUp: Firebase createUserWithEmailAndPassword → POST /auth/verify-token", () => {
+  it("calls createUserWithEmailAndPassword and POST /auth/verify-token", async () => {
+    mockCreateUserWithEmailAndPassword.mockResolvedValue({
+      user: { getIdToken: () => Promise.resolve("mock-id-token"), email: "new@example.com" },
+    });
+    mockFetch.mockResolvedValue({ ok: true });
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await user.click(screen.getByTestId("auth-sign-up-btn"));
+
+    await waitFor(() => {
+      expect(mockCreateUserWithEmailAndPassword).toHaveBeenCalledWith(
+        expect.anything(),
+        "new@example.com",
+        "newpassword123"
+      );
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining("/auth/verify-token"),
+        expect.objectContaining({
+          method: "POST",
+          credentials: "include",
+          body: JSON.stringify({ idToken: "mock-id-token" }),
+        })
+      );
+    });
+  });
+
+  it("sets error state when signUp fails", async () => {
+    mockCreateUserWithEmailAndPassword.mockRejectedValue(new Error("Email already in use"));
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await user.click(screen.getByTestId("auth-sign-up-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-error")).toHaveTextContent("Email already in use");
+    });
+  });
+
+  it("sets error state when verify-token fails after signUp", async () => {
+    mockCreateUserWithEmailAndPassword.mockResolvedValue({
+      user: { getIdToken: () => Promise.resolve("mock-id-token"), email: "new@example.com" },
+    });
+    mockFetch.mockResolvedValue({ ok: false, status: 500 });
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await user.click(screen.getByTestId("auth-sign-up-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-error")).toHaveTextContent(
+        "Failed to verify session with server."
+      );
+    });
+  });
+
+  it("sets loading true during signUp", async () => {
+    mockCreateUserWithEmailAndPassword.mockReturnValue(new Promise(() => {}));
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-loading")).toHaveTextContent("false");
+    });
+
+    await user.click(screen.getByTestId("auth-sign-up-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-loading")).toHaveTextContent("true");
+    });
+  });
+
+  it("handles non-Error thrown during signUp", async () => {
+    mockCreateUserWithEmailAndPassword.mockRejectedValue("string error");
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await user.click(screen.getByTestId("auth-sign-up-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-error")).toHaveTextContent("Sign-up failed.");
+    });
+  });
+});
+
+/* ================================================================== */
 /* getAuthErrorMessage — Firebase error code mapping                    */
 /* ================================================================== */
 
@@ -454,6 +583,11 @@ describe("getAuthErrorMessage", () => {
       code: "auth/email-already-in-use",
     });
     expect(getAuthErrorMessage(err)).toBe("An account with this email already exists.");
+  });
+
+  it("returns mapped message for auth/weak-password", () => {
+    const err = Object.assign(new Error("Firebase: Error"), { code: "auth/weak-password" });
+    expect(getAuthErrorMessage(err)).toBe("Password is too weak. Use at least 6 characters.");
   });
 
   it("returns error.message for non-Firebase errors with message", () => {
