@@ -16,6 +16,7 @@ export default defineConfig({
         "app/layout.tsx", // Root layout — metadata export, no testable logic
         "app/page.tsx", // Root redirect — no testable logic
         "app/globals.css", // CSS file
+        "app/(auth)/layout.tsx", // Auth route group layout — trivial AuthProvider wrapper, no logic
         // app/(authenticated)/audit/** — PERF-100 implemented, tested in tests/pages/audit.test.tsx
         "app/(authenticated)/dashboard/**", // Shell placeholder — not implemented yet
         "app/(authenticated)/results/**", // Shell placeholder — not implemented yet

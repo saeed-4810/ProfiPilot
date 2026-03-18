@@ -180,3 +180,38 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
+
+/* ------------------------------------------------------------------ */
+/* Firebase error code → user-friendly message mapping                 */
+/* ------------------------------------------------------------------ */
+
+const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
+  "auth/invalid-email": "Please enter a valid email address.",
+  "auth/user-disabled": "This account has been disabled. Contact support.",
+  "auth/user-not-found": "No account found with this email address.",
+  "auth/wrong-password": "Incorrect password. Please try again.",
+  "auth/invalid-credential": "Invalid email or password. Please try again.",
+  "auth/too-many-requests": "Too many attempts. Please wait and try again.",
+  "auth/network-request-failed": "Network error. Check your connection and try again.",
+  "auth/email-already-in-use": "An account with this email already exists.",
+};
+
+const DEFAULT_AUTH_ERROR = "An unexpected error occurred. Please try again.";
+
+/**
+ * Convert a Firebase Auth error (or any error) into a user-safe message.
+ * Firebase errors have a `code` property like "auth/invalid-credential".
+ */
+export function getAuthErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const firebaseError = error as Error & { code?: string };
+    if (firebaseError.code !== undefined && firebaseError.code in FIREBASE_ERROR_MESSAGES) {
+      return FIREBASE_ERROR_MESSAGES[firebaseError.code] as string;
+    }
+    // If the error message is already user-friendly (from our signIn), use it
+    if (error.message !== "" && !error.message.startsWith("Firebase:")) {
+      return error.message;
+    }
+  }
+  return DEFAULT_AUTH_ERROR;
+}

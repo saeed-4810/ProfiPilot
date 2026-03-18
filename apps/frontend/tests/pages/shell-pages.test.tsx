@@ -8,7 +8,14 @@ vi.mock("next/navigation", () => ({
 
 // Mock auth lib to prevent Firebase initialization
 vi.mock("@/lib/auth", () => ({
-  signIn: vi.fn(),
+  useAuth: () => ({
+    signIn: vi.fn(),
+    signOut: vi.fn(),
+    getIdToken: vi.fn(),
+    user: null,
+    loading: false,
+    error: null,
+  }),
   getAuthErrorMessage: () => "An unexpected error occurred.",
 }));
 
