@@ -1,5 +1,5 @@
 import { AppError } from "../domain/errors.js";
-import type { AuditJob, AuditStatus } from "../domain/audit.js";
+import type { AuditJob, AuditMetrics, AuditStatus } from "../domain/audit.js";
 import { createAuditJob as createJob, getAuditJob } from "../adapters/firestore-audit.js";
 import { processAuditJob } from "./audit-worker.js";
 
@@ -19,6 +19,7 @@ export interface AuditStatusResult {
   updatedAt: string;
   completedAt?: string | undefined;
   lastError?: string | undefined;
+  metrics?: AuditMetrics | undefined;
 }
 
 /**
@@ -62,5 +63,6 @@ export async function getAuditStatus(uid: string, jobId: string): Promise<AuditS
     updatedAt: job.updatedAt,
     ...(job.completedAt !== undefined ? { completedAt: job.completedAt } : {}),
     ...(job.lastError !== undefined ? { lastError: job.lastError } : {}),
+    ...(job.metrics !== undefined ? { metrics: job.metrics } : {}),
   };
 }
