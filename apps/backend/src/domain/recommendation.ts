@@ -135,35 +135,47 @@ export interface AISummaryResult {
 }
 
 /**
+ * Zod schema for runtime validation of Firestore recommendation documents (per ADR-017).
+ * Guards against corrupt or unexpected data from the database.
+ */
+export const RecommendationDocumentSchema = z.object({
+  auditId: z.string(),
+  ruleId: z.string(),
+  metric: z.string(),
+  currentValue: z.string(),
+  targetValue: z.string(),
+  severity: z.enum(["P0", "P1", "P2", "P3"]),
+  category: z.enum(["loading", "interactivity", "visual-stability", "server", "rendering"]),
+  suggestedFix: z.string(),
+  evidence: RuleEngineEvidenceSchema,
+  createdAt: z.string(),
+});
+
+/**
  * Recommendation document shape for Firestore persistence per database-schema.md.
  */
-export interface RecommendationDocument {
-  auditId: string;
-  ruleId: string;
-  metric: string;
-  currentValue: string;
-  targetValue: string;
-  severity: Severity;
-  category: IssueCategory;
-  suggestedFix: string;
-  evidence: RuleEngineEvidence;
-  createdAt: string;
-}
+export type RecommendationDocument = z.infer<typeof RecommendationDocumentSchema>;
+
+/**
+ * Zod schema for runtime validation of Firestore summary documents (per ADR-017).
+ * Guards against corrupt or unexpected data from the database.
+ */
+export const SummaryDocumentSchema = z.object({
+  auditId: z.string(),
+  modelVersion: z.string(),
+  promptHash: z.string(),
+  promptVersion: z.string(),
+  temperature: z.number(),
+  inputHash: z.string(),
+  content: AISummaryOutputSchema,
+  generatedAt: z.string(),
+  latencyMs: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  costUsd: z.number(),
+});
 
 /**
  * Summary document shape for Firestore persistence per database-schema.md.
  */
-export interface SummaryDocument {
-  auditId: string;
-  modelVersion: string;
-  promptHash: string;
-  promptVersion: string;
-  temperature: number;
-  inputHash: string;
-  content: AISummaryOutput;
-  generatedAt: string;
-  latencyMs: number;
-  inputTokens: number;
-  outputTokens: number;
-  costUsd: number;
-}
+export type SummaryDocument = z.infer<typeof SummaryDocumentSchema>;

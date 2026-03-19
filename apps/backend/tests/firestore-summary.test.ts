@@ -119,17 +119,15 @@ describe("T-AI-011: saveSummary", () => {
     expect(mockSet).not.toHaveBeenCalled();
   });
 
-  it("handles null executiveSummary with empty string fallback", async () => {
+  // T-PERF-129-004: saveSummary skips save when executiveSummary is null
+  it("skips save when executiveSummary is null (defensive guard per PERF-129 FIX-4)", async () => {
     const { saveSummary } = await import("../src/adapters/firestore-summary.js");
     const summary = makeSummaryResult();
     summary.executiveSummary = null;
 
     await saveSummary("audit-123", summary);
 
-    expect(mockSet).toHaveBeenCalledOnce();
-    const doc = mockSet.mock.calls[0]?.[0] as Record<string, unknown>;
-    const content = doc["content"] as Record<string, unknown>;
-    expect(content["executiveSummary"]).toBe("");
+    expect(mockSet).not.toHaveBeenCalled();
   });
 
   it("does not save when metadata is missing", async () => {
@@ -158,8 +156,23 @@ describe("getSummary", () => {
       temperature: 0.3,
       inputHash: "xyz789",
       content: {
-        executiveSummary: "Performance summary...",
-        tickets: [],
+        executiveSummary:
+          "Your website performance needs significant improvement across multiple Core Web Vitals metrics. The LCP is above threshold, indicating slow loading times that impact user experience and SEO rankings.",
+        tickets: [
+          {
+            title: "Optimize Largest Contentful Paint (LCP) performance",
+            description:
+              "The LCP metric is currently at 3200ms, which exceeds the 2500ms threshold. This impacts user experience and search rankings significantly.",
+            priority: "P2",
+            category: "loading",
+            metric: "lcp",
+            currentValue: "3.2s",
+            targetValue: "<2.5s",
+            estimatedImpact: "high",
+            suggestedFix:
+              "1. Analyze the LCP element using Chrome DevTools Performance panel. 2. Compress and serve images in modern formats (WebP/AVIF). 3. Preload the LCP resource. 4. Verify improvement with Lighthouse.",
+          },
+        ],
       },
       generatedAt: "2026-03-18T12:00:00.000Z",
       latencyMs: 2500,
@@ -179,7 +192,7 @@ describe("getSummary", () => {
     expect(result).not.toBeNull();
     expect(result!.auditId).toBe("audit-123");
     expect(result!.aiAvailable).toBe(true);
-    expect(result!.executiveSummary).toBe("Performance summary...");
+    expect(result!.executiveSummary).toContain("website performance needs significant improvement");
     expect(result!.metadata!.modelVersion).toBe("gpt-4o-2024-08-06");
     expect(result!.metadata!.latencyMs).toBe(2500);
 
@@ -193,6 +206,25 @@ describe("getSummary", () => {
 
     const { getSummary } = await import("../src/adapters/firestore-summary.js");
     const result = await getSummary("audit-nonexistent");
+
+    expect(result).toBeNull();
+  });
+
+  // T-PERF-129-003: getSummary silently filters corrupted summary document (per ADR-017)
+  it("returns null when summary document is corrupted (Zod safeParse)", async () => {
+    const corruptedDoc = {
+      auditId: "audit-123",
+      // Missing required fields: modelVersion, promptHash, content, etc.
+      someGarbage: true,
+    };
+
+    mockGetDocs.mockResolvedValue({
+      empty: false,
+      docs: [{ data: () => corruptedDoc }],
+    });
+
+    const { getSummary } = await import("../src/adapters/firestore-summary.js");
+    const result = await getSummary("audit-123");
 
     expect(result).toBeNull();
   });

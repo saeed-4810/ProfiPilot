@@ -1,5 +1,9 @@
 import { getFirebaseApp } from "../lib/firebase.js";
-import type { RuleEngineOutput, RecommendationDocument } from "../domain/recommendation.js";
+import {
+  RecommendationDocumentSchema,
+  type RuleEngineOutput,
+  type RecommendationDocument,
+} from "../domain/recommendation.js";
 import { formatMetricValue, getTargetValue } from "../services/rule-engine.js";
 
 const COLLECTION = "recommendations";
@@ -45,10 +49,18 @@ export async function saveRecommendations(
 /**
  * Get all recommendations for an audit from Firestore.
  * Returns an empty array if no recommendations exist.
+ * Uses Zod safeParse to silently filter corrupted documents (per ADR-017).
  */
 export async function getRecommendations(auditId: string): Promise<RecommendationDocument[]> {
   const firestore = getFirebaseApp().firestore();
   const snapshot = await firestore.collection(COLLECTION).where("auditId", "==", auditId).get();
 
-  return snapshot.docs.map((doc) => doc.data() as RecommendationDocument);
+  const recommendations: RecommendationDocument[] = [];
+  for (const doc of snapshot.docs) {
+    const parsed = RecommendationDocumentSchema.safeParse(doc.data());
+    if (parsed.success) {
+      recommendations.push(parsed.data);
+    }
+  }
+  return recommendations;
 }

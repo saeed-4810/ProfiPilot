@@ -76,7 +76,6 @@ describe("Firestore rules — structural validation", () => {
   // T-SEC-003
   it("defines rules for all required collections", () => {
     const requiredCollections = [
-      "match /users/{userId}",
       "match /projects/{projectId}",
       "match /urls/{urlId}",
       "match /audits/{auditId}",
@@ -90,11 +89,9 @@ describe("Firestore rules — structural validation", () => {
     }
   });
 
-  // T-SEC-004
-  it("users collection uses uid-based ownership check", () => {
-    // Users collection should check request.auth.uid == userId
-    expect(rulesContent).toMatch(/match \/users\/\{userId\}/);
-    expect(rulesContent).toContain("isOwner(userId)");
+  // T-SEC-004 / T-PERF-129-005: users collection removed — Firebase Auth handles identity
+  it("does NOT define rules for users collection (removed per PERF-129)", () => {
+    expect(rulesContent).not.toContain("match /users/{userId}");
   });
 
   // T-SEC-005
@@ -246,9 +243,31 @@ describe("Firestore indexes — structural validation", () => {
     expect(auditWorkerIndex?.queryScope).toBe("COLLECTION");
   });
 
-  it("has exactly 3 composite indexes", () => {
+  // T-PERF-129-001: summaries composite index for getSummary query
+  it("contains summaries composite index (auditId ASC, generatedAt DESC)", () => {
+    const indexes = indexesContent["indexes"] as Array<{
+      collectionGroup: string;
+      queryScope: string;
+      fields: Array<{ fieldPath: string; order: string }>;
+    }>;
+
+    const summariesIndex = indexes.find(
+      (idx) =>
+        idx.collectionGroup === "summaries" &&
+        idx.fields.length === 2 &&
+        idx.fields[0]?.fieldPath === "auditId" &&
+        idx.fields[0]?.order === "ASCENDING" &&
+        idx.fields[1]?.fieldPath === "generatedAt" &&
+        idx.fields[1]?.order === "DESCENDING"
+    );
+
+    expect(summariesIndex).toBeDefined();
+    expect(summariesIndex?.queryScope).toBe("COLLECTION");
+  });
+
+  it("has exactly 4 composite indexes", () => {
     const indexes = indexesContent["indexes"] as unknown[];
-    expect(indexes).toHaveLength(3);
+    expect(indexes).toHaveLength(4);
   });
 });
 

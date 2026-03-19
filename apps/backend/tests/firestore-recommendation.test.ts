@@ -144,4 +144,39 @@ describe("getRecommendations", () => {
 
     expect(result).toEqual([]);
   });
+
+  // T-PERF-129-002: getRecommendations silently filters corrupted documents (per ADR-017)
+  it("silently filters corrupted documents via Zod safeParse", async () => {
+    const validDoc = {
+      data: () => ({
+        auditId: "audit-123",
+        ruleId: "CWV-LCP-001",
+        metric: "lcp",
+        currentValue: "3.2s",
+        targetValue: "<2500ms",
+        severity: "P2",
+        category: "loading",
+        suggestedFix: "Optimize...",
+        evidence: { threshold: 2500, actual: 3200, delta: "+700ms" },
+        createdAt: "2026-03-18T12:00:00.000Z",
+      }),
+    };
+
+    const corruptedDoc = {
+      data: () => ({
+        auditId: "audit-123",
+        // Missing required fields: ruleId, metric, severity, etc.
+        someGarbage: true,
+      }),
+    };
+
+    mockGetDocs.mockResolvedValue({ docs: [validDoc, corruptedDoc] });
+
+    const { getRecommendations } = await import("../src/adapters/firestore-recommendation.js");
+    const result = await getRecommendations("audit-123");
+
+    // Only the valid document should be returned; corrupted one silently filtered
+    expect(result).toHaveLength(1);
+    expect(result[0]!.ruleId).toBe("CWV-LCP-001");
+  });
 });
