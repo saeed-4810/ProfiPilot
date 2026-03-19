@@ -18,12 +18,6 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // ─── Users Collection ───────────────────────────────────────────────
-    // Read/write only by authenticated user with matching uid.
-    match /users/{userId} {
-      allow read, write: if isOwner(userId);
-    }
-
     // ─── Projects Collection ────────────────────────────────────────────
     // Read/write only by authenticated user where ownerId == request.auth.uid.
     match /projects/{projectId} {
