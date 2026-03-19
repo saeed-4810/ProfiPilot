@@ -203,6 +203,62 @@ describe("T-PERF-100-004: GET /audits/:id/status (valid)", () => {
     expect(res.body.completedAt).toBe("2026-03-17T01:00:00.000Z");
   });
 
+  it("returns 200 with metrics when audit is completed", async () => {
+    const completedMetrics = {
+      lcp: 2500,
+      cls: 0.05,
+      tbt: 150,
+      fcp: 1200,
+      ttfb: 400,
+      si: 3000,
+      performanceScore: 0.85,
+      lighthouseVersion: "12.0.0",
+      fieldData: null,
+      fetchedAt: "2026-03-18T12:00:00.000Z",
+    };
+
+    mockGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        jobId: "job-completed",
+        uid: "user-123",
+        url: "https://example.com",
+        status: "completed",
+        strategy: "mobile",
+        retryCount: 0,
+        createdAt: "2026-03-17T00:00:00.000Z",
+        updatedAt: "2026-03-17T00:05:00.000Z",
+        completedAt: "2026-03-17T00:05:00.000Z",
+        metrics: completedMetrics,
+      }),
+    });
+
+    const res = await request(app)
+      .get("/audits/job-completed/status")
+      .set("Cookie", "__session=valid-session");
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("completed");
+    expect(res.body.metrics).toEqual(completedMetrics);
+    expect(res.body.metrics.lcp).toBe(2500);
+    expect(res.body.metrics.cls).toBe(0.05);
+    expect(res.body.metrics.tbt).toBe(150);
+    expect(res.body.metrics.fcp).toBe(1200);
+    expect(res.body.metrics.ttfb).toBe(400);
+    expect(res.body.metrics.si).toBe(3000);
+    expect(res.body.metrics.performanceScore).toBe(0.85);
+  });
+
+  it("returns 200 without metrics when audit is still queued", async () => {
+    const res = await request(app)
+      .get("/audits/job-abc/status")
+      .set("Cookie", "__session=valid-session");
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("queued");
+    expect(res.body.metrics).toBeUndefined();
+  });
+
   it("returns 404 when audit job does not exist", async () => {
     mockGet.mockResolvedValue({ exists: false, data: () => undefined });
 
