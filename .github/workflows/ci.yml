@@ -114,7 +114,7 @@ jobs:
       - run: pnpm build
 
   test:
-    name: Test
+    name: Test with coverage
     needs: [setup, build]
     runs-on: ubuntu-latest
     steps:
@@ -133,4 +133,104 @@ jobs:
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-pnpm-store-
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test
+      - name: Run tests with coverage enforcement
+        run: pnpm test:ci
+
+  e2e:
+    name: Playwright E2E
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: false
+      - name: Restore pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ needs.setup.outputs.store-path }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-store-
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build frontend for E2E
+        run: pnpm --filter @prefpilot/frontend build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:3001
+          NEXT_PUBLIC_FIREBASE_API_KEY: fake-api-key-for-ci
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: fake-project.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: fake-project
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: fake-project.appspot.com
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
+          NEXT_PUBLIC_FIREBASE_APP_ID: "1:000000000000:web:fake"
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/frontend
+
+      - name: Run Playwright E2E tests
+        run: pnpm --filter @prefpilot/frontend e2e
+        env:
+          CI: "true"
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:3001
+          NEXT_PUBLIC_FIREBASE_API_KEY: fake-api-key-for-ci
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: fake-project.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: fake-project
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: fake-project.appspot.com
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
+          NEXT_PUBLIC_FIREBASE_APP_ID: "1:000000000000:web:fake"
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: apps/frontend/playwright-report/
+          retention-days: 14
+
+  docker:
+    name: Docker build verification
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t prefpilot-backend-test -f apps/backend/Dockerfile .
+
+      - name: Verify container starts and responds
+        run: |
+          docker run -d --name prefpilot-test -p 3001:3001 \
+            -e NODE_ENV=production \
+            -e PORT=3001 \
+            prefpilot-backend-test
+
+          # Wait for container to be ready (max 30s)
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3001/health > /dev/null 2>&1; then
+              echo "Health check passed on attempt $i"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Health check failed after 30 attempts"
+              docker logs prefpilot-test
+              exit 1
+            fi
+            sleep 1
+          done
+
+          # Verify response body
+          RESPONSE=$(curl -sf http://localhost:3001/health)
+          echo "Health response: $RESPONSE"
+          echo "$RESPONSE" | grep -q '"status":"ok"'
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop prefpilot-test 2>/dev/null || true
+          docker rm prefpilot-test 2>/dev/null || true
+          docker rmi prefpilot-backend-test 2>/dev/null || true
