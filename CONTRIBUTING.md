@@ -174,7 +174,7 @@ Reviewers are auto-assigned via [CODEOWNERS](CODEOWNERS).
 - [ ] Branch name follows `<type>/PERF-xxx-<slug>`
 - [ ] PR title follows `<type>(<scope>): <subject>` (same as commit convention)
 - [ ] Jira ticket ID is referenced in the PR description
-- [ ] CI passes (all 5 jobs: install, lint, typecheck, build, test)
+- [ ] CI passes (all 7 jobs: install, lint, typecheck, build, test, e2e, docker)
 - [ ] No unresolved review comments before merge
 - [ ] Self-review is not allowed (author cannot approve their own PR)
 - [ ] Branch is up-to-date with target before merge

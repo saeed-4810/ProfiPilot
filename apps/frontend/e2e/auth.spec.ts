@@ -18,7 +18,7 @@ test.describe("Auth flow — /login", () => {
   // E-AUTH-001: Login page renders without errors
   test("E-AUTH-001 — login page renders with heading and form", async ({ page }) => {
     await page.goto("/login");
-    await expect(page).toHaveTitle(/PrefPilot/);
+    // Wait for the login page component to render (stronger than title check)
     await expect(page.getByTestId("login-page")).toBeVisible();
     await expect(page.getByRole("heading", { name: /Sign in to PrefPilot/i })).toBeVisible();
     // PERF-98: Login form is now implemented

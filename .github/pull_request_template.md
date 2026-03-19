@@ -30,7 +30,7 @@
 - [ ] PR title follows `<type>(<scope>): <subject> (PERF-xxx)`
 - [ ] `pre-commit` hook passed (lint-staged clean)
 - [ ] `pre-push` hook passed (typecheck clean)
-- [ ] CI passes (all 5 jobs green)
+- [ ] CI passes (all 7 jobs green)
 - [ ] Relevant documentation updated (README, Confluence artifact, ADR if applicable)
 - [ ] No `console.log` or debug code left in production paths
 - [ ] No secrets or `.env` values committed
