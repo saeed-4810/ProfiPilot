@@ -1,0 +1,281 @@
+# .github/workflows/deploy-staging.yml
+# Staging deployment workflow — deploys backend + frontend to Cloud Run,
+# then deploys Firebase Hosting config for CDN/routing.
+# Trigger: manual dispatch only (workflow_dispatch).
+# Architecture: ADR-026 (docs/adr/026-firebase-deployment-architecture.md)
+name: Deploy to Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy" to confirm staging deployment'
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  REGION: europe-west1
+  BACKEND_SERVICE: express-backend
+  FRONTEND_SERVICE: nextjs-frontend
+
+jobs:
+  # Gate: CI must have passed on this commit
+  verify-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "deploy" ]; then
+            echo "❌ Deployment not confirmed. Type 'deploy' to proceed."
+            exit 1
+          fi
+
+      - name: Verify CI passed
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const checks = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+            });
+            const buildCheck = checks.data.check_runs.find(
+              (r) => r.name === 'build' && r.conclusion === 'success'
+            );
+            if (!buildCheck) {
+              core.setFailed('CI build has not passed on this commit. Push to main and wait for CI first.');
+            }
+            console.log(`✅ CI passed (check run: ${buildCheck.id})`);
+
+  deploy-backend:
+    needs: verify-ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      backend_url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_STAGE }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      - name: Build and push backend image
+        working-directory: code
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_STAGE }}/containers/${{ env.BACKEND_SERVICE }}"
+          docker build \
+            --platform linux/amd64 \
+            -f apps/backend/Dockerfile \
+            -t "$IMAGE:${{ github.sha }}" \
+            -t "$IMAGE:latest" \
+            .
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      - name: Deploy backend to Cloud Run
+        id: deploy
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_STAGE }}/containers/${{ env.BACKEND_SERVICE }}"
+          gcloud run deploy ${{ env.BACKEND_SERVICE }} \
+            --image "$IMAGE:${{ github.sha }}" \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --ingress internal-and-cloud-load-balancing \
+            --port 3001 \
+            --memory 256Mi \
+            --cpu 1 \
+            --max-instances 1 \
+            --min-instances 0 \
+            --timeout 300s \
+            --concurrency 80 \
+            --cpu-throttling \
+            --set-env-vars "NODE_ENV=production,FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID_STAGE }},FRONTEND_URL=${{ secrets.FRONTEND_URL_STAGE }}" \
+            --set-secrets "PAGESPEED_API_KEY=PAGESPEED_API_KEY_STAGE:latest,OPENAI_API_KEY=OPENAI_API_KEY_STAGE:latest" \
+            --project ${{ secrets.GCP_PROJECT_ID_STAGE }}
+          URL=$(gcloud run services describe ${{ env.BACKEND_SERVICE }} \
+            --region ${{ env.REGION }} \
+            --project ${{ secrets.GCP_PROJECT_ID_STAGE }} \
+            --format 'value(status.url)')
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "✅ Backend deployed: $URL"
+
+      - name: Smoke test backend
+        run: |
+          URL="${{ steps.deploy.outputs.url }}"
+          for i in $(seq 1 12); do
+            if curl -sf "$URL/health" | grep -q '"status":"ok"'; then
+              echo "✅ Backend health check passed"
+              exit 0
+            fi
+            echo "⏳ Waiting for backend cold start... ($i/12)"
+            sleep 5
+          done
+          echo "❌ Backend health check failed after 60s"
+          exit 1
+
+  deploy-frontend:
+    needs: verify-ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      frontend_url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_STAGE }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      - name: Build and push frontend image
+        working-directory: code
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_STAGE }}/containers/${{ env.FRONTEND_SERVICE }}"
+          docker build \
+            --platform linux/amd64 \
+            -f apps/frontend/Dockerfile \
+            --build-arg NEXT_PUBLIC_API_BASE_URL="" \
+            --build-arg NEXT_PUBLIC_FIREBASE_API_KEY="${{ secrets.FIREBASE_API_KEY_STAGE }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="${{ secrets.FIREBASE_AUTH_DOMAIN_STAGE }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_PROJECT_ID="${{ secrets.FIREBASE_PROJECT_ID_STAGE }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="${{ secrets.FIREBASE_STORAGE_BUCKET_STAGE }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="${{ secrets.FIREBASE_MESSAGING_SENDER_ID_STAGE }}" \
+            --build-arg NEXT_PUBLIC_FIREBASE_APP_ID="${{ secrets.FIREBASE_APP_ID_STAGE }}" \
+            -t "$IMAGE:${{ github.sha }}" \
+            -t "$IMAGE:latest" \
+            .
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      - name: Deploy frontend to Cloud Run
+        id: deploy
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_STAGE }}/containers/${{ env.FRONTEND_SERVICE }}"
+          gcloud run deploy ${{ env.FRONTEND_SERVICE }} \
+            --image "$IMAGE:${{ github.sha }}" \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --ingress internal-and-cloud-load-balancing \
+            --port 3000 \
+            --memory 512Mi \
+            --cpu 1 \
+            --max-instances 1 \
+            --min-instances 0 \
+            --timeout 60s \
+            --concurrency 80 \
+            --cpu-throttling \
+            --set-env-vars "NODE_ENV=production,NEXT_TELEMETRY_DISABLED=1" \
+            --project ${{ secrets.GCP_PROJECT_ID_STAGE }}
+          URL=$(gcloud run services describe ${{ env.FRONTEND_SERVICE }} \
+            --region ${{ env.REGION }} \
+            --project ${{ secrets.GCP_PROJECT_ID_STAGE }} \
+            --format 'value(status.url)')
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "✅ Frontend deployed: $URL"
+
+  deploy-hosting:
+    needs: [deploy-backend, deploy-frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy Firebase Hosting config
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.GCP_SA_KEY_STAGE }}
+          projectId: ${{ secrets.FIREBASE_PROJECT_ID_STAGE }}
+          channelId: live
+          entryPoint: code
+
+  smoke-test:
+    needs: deploy-hosting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Firebase Hosting propagation
+        run: sleep 15
+
+      - name: Smoke test — frontend loads
+        run: |
+          URL="${{ secrets.FRONTEND_URL_STAGE }}"
+          STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Frontend loads (HTTP 200)"
+          else
+            echo "❌ Frontend returned HTTP $STATUS"
+            exit 1
+          fi
+
+      - name: Smoke test — backend health via Hosting
+        run: |
+          URL="${{ secrets.FRONTEND_URL_STAGE }}/health"
+          BODY=$(curl -sf "$URL" || echo "FAILED")
+          if echo "$BODY" | grep -q '"status":"ok"'; then
+            echo "✅ Backend /health via Firebase Hosting passed"
+          else
+            echo "❌ Backend /health via Firebase Hosting failed: $BODY"
+            exit 1
+          fi
+
+      - name: Smoke test — security headers
+        run: |
+          URL="${{ secrets.FRONTEND_URL_STAGE }}"
+          HEADERS=$(curl -sf -D - -o /dev/null "$URL")
+          PASS=true
+          for HEADER in "x-frame-options" "x-content-type-options" "strict-transport-security" "referrer-policy"; do
+            if echo "$HEADERS" | grep -qi "$HEADER"; then
+              echo "✅ $HEADER present"
+            else
+              echo "❌ $HEADER MISSING"
+              PASS=false
+            fi
+          done
+          if [ "$PASS" = false ]; then
+            echo "⚠️ Some security headers missing — verify Firebase Hosting config"
+            exit 1
+          fi
+
+      - name: Smoke test — HTTPS redirect
+        run: |
+          # Firebase Hosting always serves HTTPS. Verify HSTS header.
+          URL="${{ secrets.FRONTEND_URL_STAGE }}"
+          HSTS=$(curl -sf -D - -o /dev/null "$URL" | grep -i "strict-transport-security" || echo "MISSING")
+          echo "HSTS: $HSTS"
+          if echo "$HSTS" | grep -qi "max-age"; then
+            echo "✅ HSTS enabled"
+          else
+            echo "⚠️ HSTS header not found"
+          fi
+
+      - name: Deployment summary
+        run: |
+          echo "🚀 Deployment complete!"
+          echo "Frontend: ${{ secrets.FRONTEND_URL_STAGE }}"
+          echo "Backend (via Hosting): ${{ secrets.FRONTEND_URL_STAGE }}/health"
+          echo "Commit: ${{ github.sha }}"
+          echo "Deployed by: ${{ github.actor }}"
+          echo "Time: $(date -u)"
