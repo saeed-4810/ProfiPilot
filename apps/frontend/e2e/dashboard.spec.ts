@@ -23,13 +23,27 @@ test.describe("Dashboard flow — /dashboard", () => {
   });
 
   // E-DASH-003: Authenticated user sees their project list (PERF-125)
-  // Note: This test requires an authenticated session (Firebase user + __session cookie).
-  // Without auth, middleware redirects to /login. Full E2E auth setup is needed for this test.
+  // Requires: Firebase test user + backend running + __session cookie.
+  // Consistent with E-AUTH-003, E-AUTH-004, E-SHELL-002, E-AUDIT-003 — all auth-dependent
+  // E2E tests use test.fixme until Playwright auth state fixture is implemented.
   test.fixme("E-DASH-003 — authenticated user sees project overview (PERF-125)", async ({
     page,
   }) => {
-    // TODO(PERF-125): Set up authenticated session for E2E
+    // Requires: authenticated session (Firebase + __session cookie)
     await page.goto("/dashboard");
-    await expect(page.getByTestId("project-list")).toBeVisible();
+
+    // Dashboard page renders with heading
+    await expect(page.getByTestId("dashboard-page")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Dashboard/i })).toBeVisible();
+
+    // Project list or empty state is visible (depends on user's data)
+    await expect(
+      page.getByTestId("project-list").or(page.getByTestId("dashboard-empty"))
+    ).toBeVisible();
+
+    // Create project form is visible
+    await expect(page.getByTestId("create-project-form")).toBeVisible();
+    await expect(page.getByTestId("create-project-input")).toBeVisible();
+    await expect(page.getByTestId("create-project-submit")).toBeVisible();
   });
 });
