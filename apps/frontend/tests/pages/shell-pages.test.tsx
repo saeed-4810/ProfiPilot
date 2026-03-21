@@ -1,9 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock next/navigation for LoginPage which uses useRouter
+// Mock next/navigation for LoginPage (useRouter) and ResultsPage (useSearchParams)
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () => ({
+    get: () => null,
+  }),
 }));
 
 // Mock auth lib to prevent Firebase initialization
@@ -27,6 +30,21 @@ vi.mock("@/lib/audit", async (importOriginal) => {
     createAudit: vi.fn(),
     getAuditStatus: vi.fn(),
     isTerminalStatus: () => false,
+  };
+});
+
+// Mock results lib for ResultsPage
+vi.mock("@/lib/results", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    getRecommendations: vi.fn().mockResolvedValue({ auditId: "", recommendations: [] }),
+    getSummary: vi.fn().mockResolvedValue({
+      auditId: "",
+      executiveSummary: null,
+      tickets: [],
+      aiAvailable: false,
+    }),
   };
 });
 

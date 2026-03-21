@@ -19,7 +19,7 @@ export default defineConfig({
         "app/(auth)/layout.tsx", // Auth route group layout — trivial AuthProvider wrapper, no logic
         // app/(authenticated)/audit/** — PERF-100 implemented, tested in tests/pages/audit.test.tsx
         // app/(authenticated)/dashboard/** — PERF-125 implemented, tested in tests/pages/dashboard.test.tsx
-        "app/(authenticated)/results/**", // Shell placeholder — not implemented yet
+        // app/(authenticated)/results/** — PERF-102 implemented, tested in tests/pages/results.test.tsx
         "app/(authenticated)/export/**", // Shell placeholder — not implemented yet
       ],
       thresholds: {

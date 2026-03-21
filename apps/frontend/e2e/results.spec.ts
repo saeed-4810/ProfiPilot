@@ -1,10 +1,10 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * E2E scenarios for the AI Results flow (PERF-101).
+ * E2E scenarios for the Results + AI Summary flow (PERF-102).
  *
  * Shell tests (E-RESULTS-001, E-RESULTS-002) run now against the scaffold.
- * Feature tests (E-RESULTS-003) are stubs — implement when PERF-101 is in progress.
+ * Feature tests (E-RESULTS-003) require authenticated session with a completed audit.
  */
 
 test.describe("Results flow — /results", () => {
@@ -22,12 +22,14 @@ test.describe("Results flow — /results", () => {
     expect(response?.status()).toBe(200);
   });
 
-  // E-RESULTS-003: User sees AI-generated preference insights after audit
-  test.fixme("E-RESULTS-003 — AI insights are displayed after audit completion (PERF-101)", async ({
+  // E-RESULTS-003: Completed audit shows recommendations and AI summary
+  // Requires authenticated session with a completed audit — needs E2E auth fixtures.
+  test.fixme("E-RESULTS-003 — completed audit shows recommendations and AI summary (PERF-102)", async ({
     page,
   }) => {
-    await page.goto("/results");
-    // TODO(PERF-101): assert insights panel and recommendation cards are rendered
-    await expect(page.getByTestId("insights-panel")).toBeVisible();
+    // TODO(PERF-102): implement with authenticated E2E fixtures
+    await page.goto("/results?id=test-audit-id");
+    await expect(page.getByTestId("results-content")).toBeVisible();
+    await expect(page.getByTestId("recommendations")).toBeVisible();
   });
 });
