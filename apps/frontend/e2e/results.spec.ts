@@ -1,10 +1,10 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * E2E scenarios for the AI Results flow (PERF-101).
+ * E2E scenarios for the Results + AI Summary flow (PERF-102).
  *
  * Shell tests (E-RESULTS-001, E-RESULTS-002) run now against the scaffold.
- * Feature tests (E-RESULTS-003) are stubs — implement when PERF-101 is in progress.
+ * Feature tests (E-RESULTS-003) require authenticated session with a completed audit.
  */
 
 test.describe("Results flow — /results", () => {
@@ -22,12 +22,20 @@ test.describe("Results flow — /results", () => {
     expect(response?.status()).toBe(200);
   });
 
-  // E-RESULTS-003: User sees AI-generated preference insights after audit
-  test.fixme("E-RESULTS-003 — AI insights are displayed after audit completion (PERF-101)", async ({
+  // E-RESULTS-003: Completed audit shows recommendations and AI summary
+  // Blocked by: E-AUTH-003 (authenticated session fixture not yet available).
+  // When auth fixtures exist, remove test.fixme and provide a real audit ID.
+  test.fixme("E-RESULTS-003 — completed audit shows recommendations and AI summary (PERF-102)", async ({
     page,
   }) => {
-    await page.goto("/results");
-    // TODO(PERF-101): assert insights panel and recommendation cards are rendered
-    await expect(page.getByTestId("insights-panel")).toBeVisible();
+    // Prerequisites:
+    // 1. Authenticated session via Playwright auth state fixture (__session cookie)
+    // 2. A completed audit with recommendations in the test environment
+    // 3. Backend running with GET /audits/:id/recommendations and /summary endpoints
+    await page.goto("/results?id=test-audit-id");
+    await expect(page.getByTestId("results-content")).toBeVisible();
+    await expect(page.getByTestId("executive-summary")).toBeVisible();
+    await expect(page.getByTestId("recommendations")).toBeVisible();
+    await expect(page.getByTestId("dev-tickets")).toBeVisible();
   });
 });
