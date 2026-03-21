@@ -22,12 +22,14 @@ test.describe("Dashboard flow — /dashboard", () => {
     expect(response?.status()).toBe(200);
   });
 
-  // E-DASH-003: Authenticated user sees their project list
-  test.fixme("E-DASH-003 — authenticated user sees project overview (PERF-102)", async ({
+  // E-DASH-003: Authenticated user sees their project list (PERF-125)
+  // Note: This test requires an authenticated session (Firebase user + __session cookie).
+  // Without auth, middleware redirects to /login. Full E2E auth setup is needed for this test.
+  test.fixme("E-DASH-003 — authenticated user sees project overview (PERF-125)", async ({
     page,
   }) => {
+    // TODO(PERF-125): Set up authenticated session for E2E
     await page.goto("/dashboard");
-    // TODO(PERF-102): assert project list is rendered for a logged-in user
     await expect(page.getByTestId("project-list")).toBeVisible();
   });
 });

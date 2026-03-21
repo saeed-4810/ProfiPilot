@@ -18,7 +18,7 @@ export default defineConfig({
         "app/globals.css", // CSS file
         "app/(auth)/layout.tsx", // Auth route group layout — trivial AuthProvider wrapper, no logic
         // app/(authenticated)/audit/** — PERF-100 implemented, tested in tests/pages/audit.test.tsx
-        "app/(authenticated)/dashboard/**", // Shell placeholder — not implemented yet
+        // app/(authenticated)/dashboard/** — PERF-125 implemented, tested in tests/pages/dashboard.test.tsx
         "app/(authenticated)/results/**", // Shell placeholder — not implemented yet
         "app/(authenticated)/export/**", // Shell placeholder — not implemented yet
       ],
