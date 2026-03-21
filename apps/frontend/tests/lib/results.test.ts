@@ -10,6 +10,7 @@ import {
   COPY_AUDIT_NOT_FOUND,
   COPY_AUDIT_NOT_COMPLETED,
   COPY_RESULTS_EMPTY,
+  COPY_AUDIT_FORBIDDEN,
   type Severity,
 } from "../../lib/results";
 
@@ -314,5 +315,6 @@ describe("Copy constants", () => {
     expect(COPY_AUDIT_NOT_FOUND).toBe("Audit not found.");
     expect(COPY_AUDIT_NOT_COMPLETED).toBe("Audit still processing. Please wait and try again.");
     expect(COPY_RESULTS_EMPTY).toBe("No issues found — your site is performing great!");
+    expect(COPY_AUDIT_FORBIDDEN).toBe("You do not have access to this audit.");
   });
 });

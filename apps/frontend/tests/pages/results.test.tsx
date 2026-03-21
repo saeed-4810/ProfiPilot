@@ -591,6 +591,28 @@ describe("T-PERF-102-004: Handles 404 AUDIT_NOT_FOUND", () => {
     });
   });
 
+  it("shows Back to Dashboard button in not-found state", async () => {
+    const err = new Error("Audit not found") as Error & {
+      status: number;
+      code: string;
+    };
+    err.status = 404;
+    err.code = "AUDIT_NOT_FOUND";
+    mockGetRecommendations.mockRejectedValue(err);
+    mockGetSummary.mockRejectedValue(err);
+
+    const user = userEvent.setup();
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("results-back-dashboard-notfound")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("results-back-dashboard-notfound"));
+
+    expect(mockPush).toHaveBeenCalledWith("/dashboard");
+  });
+
   it("shows not-found state when no id search param is provided", async () => {
     mockSearchParamsId = null;
 
@@ -615,6 +637,53 @@ describe("T-PERF-102-004: Handles 404 AUDIT_NOT_FOUND", () => {
 
     expect(mockGetRecommendations).not.toHaveBeenCalled();
     expect(mockGetSummary).not.toHaveBeenCalled();
+  });
+});
+
+/* ================================================================== */
+/* Additional: Handles 403 AUDIT_FORBIDDEN                            */
+/* ================================================================== */
+
+describe("Handles 403 AUDIT_FORBIDDEN", () => {
+  it("shows forbidden state when API returns 403", async () => {
+    const err = new Error("Access denied") as Error & {
+      status: number;
+      code: string;
+    };
+    err.status = 403;
+    err.code = "AUDIT_FORBIDDEN";
+    mockGetRecommendations.mockRejectedValue(err);
+    mockGetSummary.mockRejectedValue(err);
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("results-forbidden")).toBeInTheDocument();
+      expect(screen.getByText("You do not have access to this audit.")).toBeInTheDocument();
+      expect(screen.getByText("You can only view results for audits you own.")).toBeInTheDocument();
+    });
+  });
+
+  it("navigates to dashboard when Back to Dashboard is clicked in forbidden state", async () => {
+    const err = new Error("Access denied") as Error & {
+      status: number;
+      code: string;
+    };
+    err.status = 403;
+    err.code = "AUDIT_FORBIDDEN";
+    mockGetRecommendations.mockRejectedValue(err);
+    mockGetSummary.mockRejectedValue(err);
+
+    const user = userEvent.setup();
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("results-back-dashboard")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("results-back-dashboard"));
+
+    expect(mockPush).toHaveBeenCalledWith("/dashboard");
   });
 });
 

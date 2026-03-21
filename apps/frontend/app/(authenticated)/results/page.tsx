@@ -18,6 +18,7 @@ import {
   COPY_AUDIT_NOT_FOUND,
   COPY_AUDIT_NOT_COMPLETED,
   COPY_RESULTS_EMPTY,
+  COPY_AUDIT_FORBIDDEN,
   type Recommendation,
   type SummaryResponse,
 } from "@/lib/results";
@@ -26,7 +27,14 @@ import {
 /* Page state types per ADR-002 (5 UX states + special states)        */
 /* ------------------------------------------------------------------ */
 
-type PageState = "loading" | "success" | "empty" | "error" | "not-found" | "not-completed";
+type PageState =
+  | "loading"
+  | "success"
+  | "empty"
+  | "error"
+  | "not-found"
+  | "not-completed"
+  | "forbidden";
 
 /* ------------------------------------------------------------------ */
 /* ResultsPage component                                               */
@@ -79,6 +87,11 @@ export default function ResultsPage() {
         return;
       }
 
+      if (typedErr.status === 403) {
+        setPageState("forbidden");
+        return;
+      }
+
       if (typedErr.status === 404) {
         setPageState("not-found");
         return;
@@ -105,6 +118,11 @@ export default function ResultsPage() {
   const handleRetry = useCallback(() => {
     void fetchResults();
   }, [fetchResults]);
+
+  /* --- Navigate back to dashboard --- */
+  const handleBackToDashboard = useCallback(() => {
+    router.push("/dashboard");
+  }, [router]);
 
   /* --- AI availability --- */
   const aiAvailable = summary?.aiAvailable === true;
@@ -163,15 +181,41 @@ export default function ResultsPage() {
             </div>
           )}
 
+          {/* Forbidden state — 403 AUDIT_FORBIDDEN */}
+          {pageState === "forbidden" && (
+            <div data-testid="results-forbidden" className="text-center py-16">
+              <h2 className="text-xl font-semibold mb-2 text-neutral-200">
+                {COPY_AUDIT_FORBIDDEN}
+              </h2>
+              <p className="text-neutral-400 mb-4">You can only view results for audits you own.</p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleBackToDashboard}
+                data-testid="results-back-dashboard"
+              >
+                Back to Dashboard
+              </Button>
+            </div>
+          )}
+
           {/* Not found state */}
           {pageState === "not-found" && (
             <div data-testid="results-not-found" className="text-center py-16">
               <h2 className="text-xl font-semibold mb-2 text-neutral-200">
                 {COPY_AUDIT_NOT_FOUND}
               </h2>
-              <p className="text-neutral-400">
+              <p className="text-neutral-400 mb-4">
                 The audit you are looking for does not exist or has been removed.
               </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleBackToDashboard}
+                data-testid="results-back-dashboard-notfound"
+              >
+                Back to Dashboard
+              </Button>
             </div>
           )}
 

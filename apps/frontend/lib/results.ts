@@ -78,6 +78,9 @@ export const COPY_AUDIT_NOT_COMPLETED = "Audit still processing. Please wait and
 // copy: results-empty
 export const COPY_RESULTS_EMPTY = "No issues found — your site is performing great!";
 
+// copy: audit-forbidden
+export const COPY_AUDIT_FORBIDDEN = "You do not have access to this audit.";
+
 /* ------------------------------------------------------------------ */
 /* Severity sort order — P0 first, P3 last                            */
 /* ------------------------------------------------------------------ */

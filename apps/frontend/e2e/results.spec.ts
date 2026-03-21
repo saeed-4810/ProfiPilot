@@ -23,13 +23,19 @@ test.describe("Results flow — /results", () => {
   });
 
   // E-RESULTS-003: Completed audit shows recommendations and AI summary
-  // Requires authenticated session with a completed audit — needs E2E auth fixtures.
+  // Blocked by: E-AUTH-003 (authenticated session fixture not yet available).
+  // When auth fixtures exist, remove test.fixme and provide a real audit ID.
   test.fixme("E-RESULTS-003 — completed audit shows recommendations and AI summary (PERF-102)", async ({
     page,
   }) => {
-    // TODO(PERF-102): implement with authenticated E2E fixtures
+    // Prerequisites:
+    // 1. Authenticated session via Playwright auth state fixture (__session cookie)
+    // 2. A completed audit with recommendations in the test environment
+    // 3. Backend running with GET /audits/:id/recommendations and /summary endpoints
     await page.goto("/results?id=test-audit-id");
     await expect(page.getByTestId("results-content")).toBeVisible();
+    await expect(page.getByTestId("executive-summary")).toBeVisible();
     await expect(page.getByTestId("recommendations")).toBeVisible();
+    await expect(page.getByTestId("dev-tickets")).toBeVisible();
   });
 });
