@@ -3,6 +3,11 @@
 # then deploys Firebase Hosting config for CDN/routing.
 # Trigger: manual dispatch only (workflow_dispatch).
 # Architecture: ADR-026 (docs/adr/026-firebase-deployment-architecture.md)
+#
+# Note: Cloud Run ingress is set to "all" (default) because Firebase Hosting
+# CDN rewrites are incompatible with "internal-and-cloud-load-balancing" ingress.
+# Security is enforced at the application layer (Firebase Auth, Express middleware,
+# Firestore security rules) and via Firebase Hosting security headers.
 name: Deploy to Staging
 
 on:
@@ -95,7 +100,6 @@ jobs:
             --region ${{ env.REGION }} \
             --platform managed \
             --allow-unauthenticated \
-            --ingress internal-and-cloud-load-balancing \
             --port 3001 \
             --memory 256Mi \
             --cpu 1 \
@@ -179,7 +183,6 @@ jobs:
             --region ${{ env.REGION }} \
             --platform managed \
             --allow-unauthenticated \
-            --ingress internal-and-cloud-load-balancing \
             --port 3000 \
             --memory 512Mi \
             --cpu 1 \
