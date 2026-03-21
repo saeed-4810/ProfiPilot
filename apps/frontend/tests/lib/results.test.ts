@@ -5,6 +5,9 @@ import {
   sortBySeverity,
   sortByPriority,
   getSeverityBadgeVariant,
+  formatEvidence,
+  isDevTicket,
+  normalizeTicket,
   COPY_RESULTS_LOAD_FAILED,
   COPY_AI_UNAVAILABLE,
   COPY_AUDIT_NOT_FOUND,
@@ -12,6 +15,8 @@ import {
   COPY_RESULTS_EMPTY,
   COPY_AUDIT_FORBIDDEN,
   type Severity,
+  type DevTicket,
+  type RuleEngineTicket,
 } from "../../lib/results";
 
 // --- Global fetch mock ---
@@ -316,5 +321,121 @@ describe("Copy constants", () => {
     expect(COPY_AUDIT_NOT_COMPLETED).toBe("Audit still processing. Please wait and try again.");
     expect(COPY_RESULTS_EMPTY).toBe("No issues found — your site is performing great!");
     expect(COPY_AUDIT_FORBIDDEN).toBe("You do not have access to this audit.");
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* formatEvidence                                                      */
+/* ------------------------------------------------------------------ */
+
+describe("formatEvidence", () => {
+  it("formats evidence object as human-readable string", () => {
+    expect(formatEvidence({ threshold: 2500, actual: 4200, delta: "+1700ms" })).toBe(
+      "Actual: 4200, Threshold: 2500, Delta: +1700ms"
+    );
+  });
+
+  it("handles score-type evidence", () => {
+    expect(formatEvidence({ threshold: 0.1, actual: 0.25, delta: "+0.15" })).toBe(
+      "Actual: 0.25, Threshold: 0.1, Delta: +0.15"
+    );
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* isDevTicket                                                         */
+/* ------------------------------------------------------------------ */
+
+describe("isDevTicket", () => {
+  it("returns true for AI-generated DevTicket (has title)", () => {
+    const ticket: DevTicket = {
+      title: "Fix LCP",
+      description: "Optimize images.",
+      priority: "P0",
+      category: "loading",
+      metric: "lcp",
+      currentValue: "4.2s",
+      targetValue: "2.5s",
+      estimatedImpact: "high",
+      suggestedFix: "Compress images.",
+    };
+    expect(isDevTicket(ticket)).toBe(true);
+  });
+
+  it("returns false for RuleEngineTicket (no title)", () => {
+    const ticket: RuleEngineTicket = {
+      ruleId: "CWV-LCP-001",
+      metric: "lcp",
+      value: 4200,
+      unit: "ms",
+      rating: "poor",
+      severity: "P0",
+      category: "loading",
+      suggestedFix: "Optimize images.",
+      evidence: { threshold: 2500, actual: 4200, delta: "+1700ms" },
+    };
+    expect(isDevTicket(ticket)).toBe(false);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* normalizeTicket                                                     */
+/* ------------------------------------------------------------------ */
+
+describe("normalizeTicket", () => {
+  it("passes through DevTicket unchanged", () => {
+    const ticket: DevTicket = {
+      title: "Fix LCP",
+      description: "Optimize images.",
+      priority: "P0",
+      category: "loading",
+      metric: "lcp",
+      currentValue: "4.2s",
+      targetValue: "2.5s",
+      estimatedImpact: "high",
+      suggestedFix: "Compress images.",
+    };
+    expect(normalizeTicket(ticket)).toEqual(ticket);
+  });
+
+  it("normalizes RuleEngineTicket into NormalizedTicket shape", () => {
+    const ticket: RuleEngineTicket = {
+      ruleId: "CWV-LCP-001",
+      metric: "lcp",
+      value: 4200,
+      unit: "ms",
+      rating: "poor",
+      severity: "P0",
+      category: "loading",
+      suggestedFix: "Optimize images.",
+      evidence: { threshold: 2500, actual: 4200, delta: "+1700ms" },
+    };
+    const normalized = normalizeTicket(ticket);
+    expect(normalized.title).toBe("LCP — poor");
+    expect(normalized.description).toBe("Optimize images.");
+    expect(normalized.priority).toBe("P0");
+    expect(normalized.category).toBe("loading");
+    expect(normalized.metric).toBe("lcp");
+    expect(normalized.currentValue).toBe("4200ms");
+    expect(normalized.targetValue).toBe("threshold: 2500ms");
+    expect(normalized.estimatedImpact).toBe("+1700ms");
+    expect(normalized.suggestedFix).toBe("Optimize images.");
+  });
+
+  it("normalizes RuleEngineTicket with score unit (no unit suffix)", () => {
+    const ticket: RuleEngineTicket = {
+      ruleId: "CWV-CLS-001",
+      metric: "cls",
+      value: 0.25,
+      unit: "score",
+      rating: "poor",
+      severity: "P0",
+      category: "visual-stability",
+      suggestedFix: "Set explicit dimensions.",
+      evidence: { threshold: 0.1, actual: 0.25, delta: "+0.15" },
+    };
+    const normalized = normalizeTicket(ticket);
+    expect(normalized.currentValue).toBe("0.25");
+    expect(normalized.targetValue).toBe("threshold: 0.1");
   });
 });

@@ -13,6 +13,8 @@ import {
   sortBySeverity,
   sortByPriority,
   getSeverityBadgeVariant,
+  formatEvidence,
+  normalizeTicket,
   COPY_RESULTS_LOAD_FAILED,
   COPY_AI_UNAVAILABLE,
   COPY_AUDIT_NOT_FOUND,
@@ -21,6 +23,7 @@ import {
   COPY_AUDIT_FORBIDDEN,
   type Recommendation,
   type SummaryResponse,
+  type NormalizedTicket,
 } from "@/lib/results";
 
 /* ------------------------------------------------------------------ */
@@ -49,6 +52,7 @@ export default function ResultsPage() {
   const [pageState, setPageState] = useState<PageState>("loading");
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
+  const [normalizedTickets, setNormalizedTickets] = useState<NormalizedTicket[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   /* --- Refs --- */
@@ -73,6 +77,9 @@ export default function ResultsPage() {
       const sorted = sortBySeverity(recsResult.recommendations);
       setRecommendations(sorted);
       setSummary(summaryResult);
+
+      const tickets = summaryResult.tickets.map(normalizeTicket);
+      setNormalizedTickets(sortByPriority(tickets));
 
       if (sorted.length === 0 && summaryResult.tickets.length === 0) {
         setPageState("empty");
@@ -277,13 +284,13 @@ export default function ResultsPage() {
               )}
 
               {/* Dev ticket backlog */}
-              {summary !== null && summary.tickets.length > 0 && (
+              {normalizedTickets.length > 0 && (
                 <section data-testid="dev-tickets" className="mb-8">
                   <h2 className="text-xl font-semibold mb-4 text-neutral-200">
                     Dev Ticket Backlog
                   </h2>
                   <div className="space-y-3">
-                    {sortByPriority(summary.tickets).map((ticket, idx) => (
+                    {normalizedTickets.map((ticket, idx) => (
                       <Card key={idx} data-testid={`dev-ticket-${idx}`}>
                         <div className="flex items-center gap-3 mb-2">
                           <Badge
@@ -336,8 +343,10 @@ export default function ResultsPage() {
                             <span>Target: {rec.targetValue}</span>
                           </div>
                           <p className="text-sm text-neutral-300 mb-2">{rec.suggestedFix}</p>
-                          {rec.evidence !== "" && (
-                            <p className="text-xs text-neutral-500 italic">{rec.evidence}</p>
+                          {rec.evidence && (
+                            <p className="text-xs text-neutral-500 italic">
+                              {formatEvidence(rec.evidence)}
+                            </p>
                           )}
                         </div>
                       </Card>

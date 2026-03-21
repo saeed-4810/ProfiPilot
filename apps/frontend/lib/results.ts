@@ -7,6 +7,13 @@ const API_BASE = process.env["NEXT_PUBLIC_API_BASE_URL"] ?? "http://localhost:30
 /** Severity levels for recommendations, ordered P0 (critical) → P3 (low). */
 export type Severity = "P0" | "P1" | "P2" | "P3";
 
+/** Evidence object from rule engine — threshold vs actual comparison. */
+export interface RuleEngineEvidence {
+  threshold: number;
+  actual: number;
+  delta: string;
+}
+
 /** A single recommendation from GET /audits/:id/recommendations (CTR-007). */
 export interface Recommendation {
   ruleId: string;
@@ -16,7 +23,7 @@ export interface Recommendation {
   currentValue: string;
   targetValue: string;
   suggestedFix: string;
-  evidence: string;
+  evidence: RuleEngineEvidence;
 }
 
 /** Response from GET /audits/:id/recommendations (CTR-007). */
@@ -25,7 +32,7 @@ export interface RecommendationsResponse {
   recommendations: Recommendation[];
 }
 
-/** A dev ticket from the AI summary. */
+/** A dev ticket from the AI summary (AITicket shape). */
 export interface DevTicket {
   title: string;
   description: string;
@@ -38,11 +45,31 @@ export interface DevTicket {
   suggestedFix: string;
 }
 
-/** Response from GET /audits/:id/summary when AI is available (CTR-008). */
+/**
+ * Rule engine output ticket (fallback when AI is unavailable).
+ * Different shape from AITicket — has value/unit/evidence instead of
+ * title/description/currentValue/targetValue/estimatedImpact.
+ */
+export interface RuleEngineTicket {
+  ruleId: string;
+  metric: string;
+  value: number;
+  unit: string;
+  rating: string;
+  severity: Severity;
+  category: string;
+  suggestedFix: string;
+  evidence: RuleEngineEvidence;
+}
+
+/** CTR-008 tickets can be either AI-generated or rule engine fallback. */
+export type SummaryTicket = DevTicket | RuleEngineTicket;
+
+/** Response from GET /audits/:id/summary (CTR-008). */
 export interface SummaryResponse {
   auditId: string;
   executiveSummary: string | null;
-  tickets: DevTicket[];
+  tickets: SummaryTicket[];
   modelVersion?: string;
   promptHash?: string;
   generatedAt?: string;
@@ -175,4 +202,58 @@ const SEVERITY_BADGE_VARIANT: Record<Severity, BadgeVariant> = {
 /** Get the Badge variant for a severity level. */
 export function getSeverityBadgeVariant(severity: Severity): BadgeVariant {
   return SEVERITY_BADGE_VARIANT[severity];
+}
+
+/* ------------------------------------------------------------------ */
+/* Evidence formatting                                                 */
+/* ------------------------------------------------------------------ */
+
+/** Format a RuleEngineEvidence object as a human-readable string. */
+export function formatEvidence(evidence: RuleEngineEvidence): string {
+  return `Actual: ${evidence.actual}, Threshold: ${evidence.threshold}, Delta: ${evidence.delta}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Ticket type guard and normalization                                 */
+/* ------------------------------------------------------------------ */
+
+/** Type guard: check if a ticket is an AI-generated DevTicket (has `title`). */
+export function isDevTicket(ticket: SummaryTicket): ticket is DevTicket {
+  return "title" in ticket;
+}
+
+/**
+ * Normalized ticket for rendering — common shape for both AI and rule engine tickets.
+ * Allows the UI to render a single card layout regardless of ticket source.
+ */
+export interface NormalizedTicket {
+  title: string;
+  description: string;
+  priority: Severity;
+  category: string;
+  metric: string;
+  currentValue: string;
+  targetValue: string;
+  estimatedImpact: string;
+  suggestedFix: string;
+}
+
+/** Normalize a SummaryTicket (AI or rule engine) into a common rendering shape. */
+export function normalizeTicket(ticket: SummaryTicket): NormalizedTicket {
+  if (isDevTicket(ticket)) {
+    return ticket;
+  }
+
+  // Rule engine ticket — synthesize missing fields
+  return {
+    title: `${ticket.metric.toUpperCase()} — ${ticket.rating}`,
+    description: ticket.suggestedFix,
+    priority: ticket.severity,
+    category: ticket.category,
+    metric: ticket.metric,
+    currentValue: `${ticket.value}${ticket.unit === "score" ? "" : ticket.unit}`,
+    targetValue: `threshold: ${ticket.evidence.threshold}${ticket.unit === "score" ? "" : ticket.unit}`,
+    estimatedImpact: ticket.evidence.delta,
+    suggestedFix: ticket.suggestedFix,
+  };
 }
