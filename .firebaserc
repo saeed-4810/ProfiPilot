@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "prefpilot-dev"
+    "default": "prefpilot-dev",
+    "staging": "prefpilot-stage"
   }
 }
