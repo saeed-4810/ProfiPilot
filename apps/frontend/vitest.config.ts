@@ -20,7 +20,7 @@ export default defineConfig({
         // app/(authenticated)/audit/** — PERF-100 implemented, tested in tests/pages/audit.test.tsx
         // app/(authenticated)/dashboard/** — PERF-125 implemented, tested in tests/pages/dashboard.test.tsx
         // app/(authenticated)/results/** — PERF-102 implemented, tested in tests/pages/results.test.tsx
-        "app/(authenticated)/export/**", // Shell placeholder — not implemented yet
+        // app/(authenticated)/export/** — PERF-103 implemented, tested in tests/pages/export.test.tsx
       ],
       thresholds: {
         statements: 100,
