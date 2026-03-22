@@ -43,30 +43,19 @@ test.describe("Results flow — /results", () => {
       { timeout: 150_000 }
     );
 
-    // If audit succeeded, navigate to results
+    // If audit succeeded, wait for auto-redirect to /results?id=<auditId>
     const success = page.getByTestId("audit-success");
     if (await success.isVisible()) {
-      // Look for a link to results page and click it
-      const resultsLink = page.locator("a[href*='/results']").first();
-      if (await resultsLink.isVisible()) {
-        await resultsLink.click();
-      } else {
-        // Extract audit ID from the page and navigate directly
-        const jobIdEl = page.getByTestId("audit-job-id");
-        const jobIdText = await jobIdEl.textContent();
-        const auditId = jobIdText?.replace(/.*:\s*/, "").trim();
-        if (auditId) {
-          await page.goto(`/results?id=${auditId}`);
-        }
-      }
+      await expect(page).toHaveURL(/\/results\?id=/, { timeout: 10_000 });
 
       // Verify results page loaded with content
       await expect(page.getByTestId("results-page")).toBeVisible({ timeout: 15_000 });
 
-      // Wait for results to load (loading → content)
+      // Wait for results to load (loading → content/empty/error/not-completed)
       await expect(
         page
           .getByTestId("results-content")
+          .or(page.getByTestId("results-empty"))
           .or(page.getByTestId("results-error"))
           .or(page.getByTestId("results-not-completed"))
       ).toBeVisible({ timeout: 30_000 });
@@ -82,6 +71,12 @@ test.describe("Results flow — /results", () => {
 
         // Dev tickets section
         await expect(page.getByTestId("dev-tickets")).toBeVisible();
+      }
+
+      // If empty state, verify the "no issues" message
+      const empty = page.getByTestId("results-empty");
+      if (await empty.isVisible()) {
+        await expect(empty).toContainText("performing great");
       }
     }
   });

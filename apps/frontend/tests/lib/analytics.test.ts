@@ -8,6 +8,7 @@ import {
   track,
   trackPageView,
   trackLoginAttempt,
+  trackSignupAttempt,
   trackAuditTrigger,
   trackResultsView,
   trackExportClick,
@@ -171,6 +172,18 @@ describe("T-PERF-122-007: Typed event helpers match ADR-002 telemetry contract",
     expect(mock.capture).toHaveBeenCalledWith("login_attempt", {
       method: "email",
       timestamp: 2000,
+    });
+  });
+
+  it("trackSignupAttempt sends signup_attempt with method and timestamp", () => {
+    const mock = createMockProvider();
+    setAnalyticsProvider(mock);
+
+    trackSignupAttempt({ method: "email", timestamp: 3000 });
+
+    expect(mock.capture).toHaveBeenCalledWith("signup_attempt", {
+      method: "email",
+      timestamp: 3000,
     });
   });
 
@@ -355,6 +368,7 @@ describe("U-PERF-122-001: Graceful degradation without provider", () => {
   it("typed helpers do not throw when provider is not set", () => {
     expect(() => trackPageView({ route: "/", timestamp: 0 })).not.toThrow();
     expect(() => trackLoginAttempt({ method: "email", timestamp: 0 })).not.toThrow();
+    expect(() => trackSignupAttempt({ method: "email", timestamp: 0 })).not.toThrow();
     expect(() => trackAuditTrigger({ url: "https://x.com", timestamp: 0 })).not.toThrow();
     expect(() => trackResultsView({ audit_id: "x", timestamp: 0 })).not.toThrow();
     expect(() => trackExportClick({ format: "pdf", audit_id: "x" })).not.toThrow();

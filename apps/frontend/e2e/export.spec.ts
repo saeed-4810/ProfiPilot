@@ -67,13 +67,13 @@ test.describe("Export flow — /export", () => {
       return;
     }
 
-    // Step 2: Extract audit ID and navigate to export
-    const jobIdEl = page.getByTestId("audit-job-id");
-    const jobIdText = await jobIdEl.textContent();
-    const auditId = jobIdText?.replace(/.*:\s*/, "").trim();
+    // Step 2: Wait for auto-redirect to /results?id=<auditId>, then extract ID from URL
+    await expect(page).toHaveURL(/\/results\?id=/, { timeout: 10_000 });
+    const resultsUrl = new URL(page.url());
+    const auditId = resultsUrl.searchParams.get("id");
 
     if (!auditId) {
-      test.skip(true, "Could not extract audit ID");
+      test.skip(true, "Could not extract audit ID from results URL");
       return;
     }
 

@@ -32,6 +32,7 @@ export interface AnalyticsProvider {
 export type TelemetryEvent =
   | "page_view"
   | "login_attempt"
+  | "signup_attempt"
   | "audit_trigger"
   | "results_view"
   | "export_click";
@@ -44,6 +45,12 @@ export interface PageViewPayload {
 
 /** Payload for login_attempt event. */
 export interface LoginAttemptPayload {
+  readonly method: string;
+  readonly timestamp: number;
+}
+
+/** Payload for signup_attempt event. */
+export interface SignupAttemptPayload {
   readonly method: string;
   readonly timestamp: number;
 }
@@ -145,6 +152,11 @@ export function trackPageView(payload: PageViewPayload): void {
 /** T-PERF-122-007: login_attempt — fires on login button click. */
 export function trackLoginAttempt(payload: LoginAttemptPayload): void {
   track("login_attempt", { ...payload });
+}
+
+/** T-PERF-137-001: signup_attempt — fires on signup button click. */
+export function trackSignupAttempt(payload: SignupAttemptPayload): void {
+  track("signup_attempt", { ...payload });
 }
 
 /** T-PERF-122-007: audit_trigger — fires on audit form submit. */
