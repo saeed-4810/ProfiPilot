@@ -68,6 +68,8 @@ export default function SignupPage() {
   /* --- Refs --- */
   const emailInputRef = useRef<HTMLInputElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
+  /** Tracks whether a sign-up is in progress to prevent useEffect redirect race. */
+  const isSigningUp = useRef(false);
 
   /* --- Auto-focus email on mount --- */
   useEffect(() => {
@@ -75,9 +77,9 @@ export default function SignupPage() {
     trackPageView({ route: "/signup", timestamp: Date.now() });
   }, []);
 
-  /* --- Redirect if already authenticated --- */
+  /* --- Redirect if already authenticated (not during active sign-up) --- */
   useEffect(() => {
-    if (!authLoading && user !== null) {
+    if (!authLoading && user !== null && !isSigningUp.current) {
       router.push("/dashboard");
     }
   }, [user, authLoading, router]);
@@ -126,17 +128,20 @@ export default function SignupPage() {
       /* U-PERF-137-001: Loading state */
       trackSignupAttempt({ method: "email", timestamp: Date.now() });
       setPageState("loading");
+      isSigningUp.current = true;
 
       try {
         /* P-PERF-137-001: Create account with valid credentials */
         await signUp(parsed.data.email, parsed.data.password);
 
-        /* Success — redirect to dashboard */
+        /* Success — redirect to dashboard (cookie is now set) */
+        isSigningUp.current = false;
         setPageState("success");
         router.push("/dashboard");
       } catch (err: unknown) {
         /* P-PERF-137-002: Existing email → error shown */
         /* U-PERF-137-002: Error banner with role="alert" */
+        isSigningUp.current = false;
         const message = getAuthErrorMessage(err);
         setError(message);
         setPageState("error");

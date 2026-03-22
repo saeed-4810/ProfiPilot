@@ -58,6 +58,8 @@ export default function LoginPage() {
   /* --- Refs --- */
   const emailInputRef = useRef<HTMLInputElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
+  /** Tracks whether a sign-in is in progress to prevent useEffect redirect race. */
+  const isSigningIn = useRef(false);
 
   /* --- Auto-focus email on mount --- */
   useEffect(() => {
@@ -65,9 +67,9 @@ export default function LoginPage() {
     trackPageView({ route: "/login", timestamp: Date.now() });
   }, []);
 
-  /* --- Redirect if already authenticated --- */
+  /* --- Redirect if already authenticated (not during active sign-in) --- */
   useEffect(() => {
-    if (!authLoading && user !== null) {
+    if (!authLoading && user !== null && !isSigningIn.current) {
       router.push("/dashboard");
     }
   }, [user, authLoading, router]);
@@ -109,17 +111,20 @@ export default function LoginPage() {
       /* U-PERF-98-001: Loading state */
       trackLoginAttempt({ method: "email", timestamp: Date.now() });
       setPageState("loading");
+      isSigningIn.current = true;
 
       try {
         /* P-PERF-98-001: Sign in with valid credentials */
         await signIn(parsed.data.email, parsed.data.password);
 
-        /* Success — redirect to dashboard */
+        /* Success — redirect to dashboard (cookie is now set) */
+        isSigningIn.current = false;
         setPageState("success");
         router.push("/dashboard");
       } catch (err: unknown) {
         /* P-PERF-98-002: Invalid credentials → error shown */
         /* U-PERF-98-002: Error banner with role="alert" */
+        isSigningIn.current = false;
         const message = getAuthErrorMessage(err);
         setError(message);
         setPageState("error");
