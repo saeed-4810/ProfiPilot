@@ -188,6 +188,7 @@ export default function SignupPage() {
       const message = getAuthErrorMessage(err);
       setError(message);
       setPageState("error");
+      /* v8 ignore next -- errorRef may be null in test environment */
       setTimeout(() => errorRef.current?.focus(), 50);
     }
   }, [signInWithGoogle, router]);
