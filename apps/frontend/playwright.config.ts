@@ -1,40 +1,87 @@
 import { defineConfig, devices } from "@playwright/test";
+import path from "path";
+import { readFileSync, existsSync } from "fs";
 
 /**
- * Local/CI Playwright config — runs shell E2E tests against localhost.
+ * Local/CI Playwright config.
  *
- * This config runs ONLY the shell tests (page renders, redirects, analytics)
- * that do NOT require Firebase Auth or a real backend. These tests use fake
- * Firebase config and verify the frontend renders correctly.
+ * Behavior depends on whether E2E_TEST_EMAIL is set:
  *
- * For authenticated user flow tests (E-AUTH-003, E-DASH-003, etc.) and staging
- * infrastructure smoke tests, use playwright.staging.config.ts instead:
+ * - WITH credentials (local dev):
+ *   Runs auth.setup.ts first, then ALL E2E tests including authenticated flows.
+ *   Set E2E_TEST_EMAIL + E2E_TEST_PASSWORD in .env.local or export them.
+ *
+ * - WITHOUT credentials (CI):
+ *   Skips auth.setup.ts. Authenticated tests auto-skip via test.skip() guards.
+ *   Only shell tests (page renders, redirects) run.
+ *
+ * Excluded always:
+ *   - staging-smoke.spec.ts (requires live staging deployment, not localhost)
+ *
+ * For staging-specific tests, use playwright.staging.config.ts:
  *   pnpm --filter @prefpilot/frontend exec playwright test --config playwright.staging.config.ts
- *
- * Excluded from this config:
- *   - auth.setup.ts (requires real Firebase credentials)
- *   - staging-smoke.spec.ts (requires live staging deployment)
- *   - Authenticated tests in auth/dashboard/audit/results/export specs run only
- *     the shell subset (tests that clear cookies or don't need storageState)
  */
+
+/* Load .env.local for E2E_TEST_EMAIL/PASSWORD (Playwright doesn't auto-load Next.js env files) */
+const envLocalPath = path.join(import.meta.dirname, ".env.local");
+if (existsSync(envLocalPath)) {
+  const envContent = readFileSync(envLocalPath, "utf-8");
+  for (const line of envContent.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed === "" || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx);
+    const value = trimmed.slice(eqIdx + 1);
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
+
+const hasCredentials = !!process.env["E2E_TEST_EMAIL"];
+const AUTH_STATE_PATH = path.join(import.meta.dirname, "e2e", ".auth", "user.json");
+
+const projects = hasCredentials
+  ? [
+      /* Auth setup: sign in once, save storageState */
+      {
+        name: "auth-setup",
+        testMatch: /auth\.setup\.ts/,
+        use: { ...devices["Desktop Chrome"] },
+      },
+      /* All tests: shell tests run directly, auth tests use storageState */
+      {
+        name: "chromium",
+        dependencies: ["auth-setup"],
+        use: {
+          ...devices["Desktop Chrome"],
+          storageState: AUTH_STATE_PATH,
+        },
+      },
+    ]
+  : [
+      /* No credentials: only shell tests will run (auth tests auto-skip) */
+      {
+        name: "chromium",
+        use: { ...devices["Desktop Chrome"] },
+      },
+    ];
+
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: ["auth.setup.ts", "staging-smoke.spec.ts"],
-  fullyParallel: true,
+  testIgnore: ["staging-smoke.spec.ts"],
+  fullyParallel: !hasCredentials,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : 4,
+  workers: hasCredentials ? 1 : process.env.CI ? 1 : 4,
   reporter: "html",
+  timeout: hasCredentials ? 60_000 : 30_000,
   use: {
     baseURL: "http://localhost:3000",
     trace: "on-first-retry",
   },
-  projects: [
-    {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
-    },
-  ],
+  projects,
   webServer: {
     command: process.env.CI ? "pnpm start" : "pnpm dev",
     url: "http://localhost:3000",
