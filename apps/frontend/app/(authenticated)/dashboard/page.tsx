@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, type FormEvent } from "react"
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { MotionWrapper } from "@/components/MotionWrapper";
+import { trackPageView } from "@/lib/analytics";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -128,6 +129,7 @@ export default function DashboardPage() {
 
   /* --- Initial load --- */
   useEffect(() => {
+    trackPageView({ route: "/dashboard", timestamp: Date.now() });
     void fetchProjects();
   }, [fetchProjects]);
 

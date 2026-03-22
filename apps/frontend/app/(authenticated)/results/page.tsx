@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { MotionWrapper } from "@/components/MotionWrapper";
+import { trackResultsView } from "@/lib/analytics";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -118,8 +119,11 @@ export default function ResultsPage() {
 
   /* --- Initial load --- */
   useEffect(() => {
+    if (auditId !== null && auditId !== "") {
+      trackResultsView({ audit_id: auditId, timestamp: Date.now() });
+    }
     void fetchResults();
-  }, [fetchResults]);
+  }, [fetchResults, auditId]);
 
   /* --- Retry handler --- */
   const handleRetry = useCallback(() => {

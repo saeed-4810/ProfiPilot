@@ -24,6 +24,7 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { MotionWrapper } from "@/components/MotionWrapper";
 import { useAuth, getAuthErrorMessage } from "@/lib/auth";
+import { trackPageView, trackLoginAttempt } from "@/lib/analytics";
 
 /* ------------------------------------------------------------------ */
 /* Zod schema — client-side validation                                 */
@@ -60,6 +61,7 @@ export default function LoginPage() {
   /* --- Auto-focus email on mount --- */
   useEffect(() => {
     emailInputRef.current?.focus();
+    trackPageView({ route: "/login", timestamp: Date.now() });
   }, []);
 
   /* --- Redirect if already authenticated --- */
@@ -104,6 +106,7 @@ export default function LoginPage() {
       }
 
       /* U-PERF-98-001: Loading state */
+      trackLoginAttempt({ method: "email", timestamp: Date.now() });
       setPageState("loading");
 
       try {
