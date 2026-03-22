@@ -34,6 +34,7 @@ test.describe("Auth flow — /login", () => {
 
   // E-AUTH-003: User signs in with valid Firebase credentials → redirects to /dashboard
   test("E-AUTH-003 — valid sign-in redirects to /dashboard", async ({ page }) => {
+    test.skip(!process.env["E2E_TEST_EMAIL"], "Requires E2E_TEST_EMAIL — run via staging config");
     // The auth.setup.ts already proved sign-in works. Here we verify the
     // authenticated storageState gives us access to /dashboard directly.
     await page.goto("/dashboard");
@@ -43,6 +44,7 @@ test.describe("Auth flow — /login", () => {
 
   // E-AUTH-004: Invalid credentials show error message
   test("E-AUTH-004 — invalid credentials show error message", async ({ page }) => {
+    test.skip(!process.env["E2E_TEST_EMAIL"], "Requires real Firebase — run via staging config");
     await page.context().clearCookies();
     await page.goto("/login");
     await page.getByTestId("login-email-input").fill("invalid-user@nonexistent.com");
@@ -65,6 +67,7 @@ test.describe("App Shell — route protection (PERF-115)", () => {
 
   // E-SHELL-002: Navigation renders on authenticated pages
   test("E-SHELL-002 — navigation renders on authenticated pages", async ({ page }) => {
+    test.skip(!process.env["E2E_TEST_EMAIL"], "Requires auth — run via staging config");
     await page.goto("/dashboard");
     await expect(page.getByTestId("dashboard-page")).toBeVisible();
     // Navigation component should be visible on authenticated pages

@@ -28,6 +28,7 @@ test.describe("Audit flow — /audit", () => {
 
   // E-AUDIT-003: Audit form renders with URL input and validates input
   test("E-AUDIT-003 — audit form renders and validates input", async ({ page }) => {
+    test.skip(!process.env["E2E_TEST_EMAIL"], "Requires auth — run via staging config");
     await page.goto("/audit");
     await expect(page.getByTestId("audit-page")).toBeVisible({ timeout: 10_000 });
 
@@ -50,6 +51,7 @@ test.describe("Audit flow — /audit", () => {
 
   // E-AUDIT-004: Full audit flow — submit valid URL → progress → complete → results link
   test("E-AUDIT-004 — full audit flow: submit → poll → complete", async ({ page }) => {
+    test.skip(!process.env["E2E_TEST_EMAIL"], "Requires auth — run via staging config");
     test.setTimeout(180_000); // Audit can take up to 2 minutes (PSI API + AI)
 
     await page.goto("/audit");

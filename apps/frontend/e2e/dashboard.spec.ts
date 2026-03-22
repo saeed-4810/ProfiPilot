@@ -29,6 +29,7 @@ test.describe("Dashboard flow — /dashboard", () => {
 
   // E-DASH-003: Authenticated user sees their project list or empty state
   test("E-DASH-003 — authenticated user sees project overview", async ({ page }) => {
+    test.skip(!process.env["E2E_TEST_EMAIL"], "Requires auth — run via staging config");
     await page.goto("/dashboard");
     await expect(page.getByTestId("dashboard-page")).toBeVisible();
     await expect(page.getByRole("heading", { name: /Dashboard/i })).toBeVisible();
@@ -43,6 +44,7 @@ test.describe("Dashboard flow — /dashboard", () => {
 
   // E-DASH-004: User creates a new project from dashboard
   test("E-DASH-004 — user creates a new project", async ({ page }) => {
+    test.skip(!process.env["E2E_TEST_EMAIL"], "Requires auth — run via staging config");
     await page.goto("/dashboard");
     await expect(page.getByTestId("dashboard-page")).toBeVisible({ timeout: 15_000 });
 
@@ -61,6 +63,7 @@ test.describe("Dashboard flow — /dashboard", () => {
 
   // E-DASH-005: User adds a URL to a project
   test("E-DASH-005 — user adds a URL to a project", async ({ page }) => {
+    test.skip(!process.env["E2E_TEST_EMAIL"], "Requires auth — run via staging config");
     await page.goto("/dashboard");
     await expect(page.getByTestId("dashboard-page")).toBeVisible({ timeout: 15_000 });
 
@@ -90,6 +93,7 @@ test.describe("Dashboard flow — /dashboard", () => {
 
   // E-DASH-006: User triggers audit from dashboard URL list
   test("E-DASH-006 — user triggers audit from dashboard", async ({ page }) => {
+    test.skip(!process.env["E2E_TEST_EMAIL"], "Requires auth — run via staging config");
     await page.goto("/dashboard");
     await expect(page.getByTestId("dashboard-page")).toBeVisible({ timeout: 15_000 });
     await page.waitForTimeout(2000);

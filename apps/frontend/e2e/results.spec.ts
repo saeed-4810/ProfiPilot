@@ -28,6 +28,7 @@ test.describe("Results flow — /results", () => {
 
   // E-RESULTS-003: Results page with a completed audit shows recommendations + AI summary
   test("E-RESULTS-003 — completed audit shows recommendations and AI summary", async ({ page }) => {
+    test.skip(!process.env["E2E_TEST_EMAIL"], "Requires auth — run via staging config");
     test.setTimeout(180_000);
 
     // First, trigger an audit to get a real audit ID
@@ -87,6 +88,7 @@ test.describe("Results flow — /results", () => {
 
   // E-RESULTS-004: Results page handles missing audit ID gracefully
   test("E-RESULTS-004 — results page handles missing audit ID", async ({ page }) => {
+    test.skip(!process.env["E2E_TEST_EMAIL"], "Requires auth — run via staging config");
     await page.goto("/results");
     await expect(page.getByTestId("results-page")).toBeVisible({ timeout: 10_000 });
 

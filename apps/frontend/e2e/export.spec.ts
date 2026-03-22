@@ -28,6 +28,7 @@ test.describe("Export flow — /export", () => {
 
   // E-EXPORT-003: Export page renders format selector and download controls
   test("E-EXPORT-003 — export page renders format selector", async ({ page }) => {
+    test.skip(!process.env["E2E_TEST_EMAIL"], "Requires auth — run via staging config");
     await page.goto("/export");
     await expect(page.getByTestId("export-page")).toBeVisible({ timeout: 10_000 });
 
@@ -45,6 +46,7 @@ test.describe("Export flow — /export", () => {
 
   // E-EXPORT-004: Full export flow — trigger audit → results → export → download
   test("E-EXPORT-004 — full export flow: audit → results → export → download", async ({ page }) => {
+    test.skip(!process.env["E2E_TEST_EMAIL"], "Requires auth — run via staging config");
     test.setTimeout(180_000);
 
     // Step 1: Trigger an audit
