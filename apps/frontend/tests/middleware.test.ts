@@ -6,13 +6,25 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockRedirect = vi.fn().mockReturnValue({ type: "redirect" });
 const mockNext = vi.fn().mockReturnValue({ type: "next" });
+const mockConstructor = vi.fn();
 
-vi.mock("next/server", () => ({
-  NextResponse: {
-    redirect: (...args: unknown[]) => mockRedirect(...args),
-    next: (...args: unknown[]) => mockNext(...args),
-  },
-}));
+vi.mock("next/server", () => {
+  /**
+   * Mock NextResponse as a class so `new NextResponse(...)` works.
+   * Static methods (redirect, next) are attached to the class.
+   */
+  class MockNextResponse {
+    type = "response";
+    status: number;
+    constructor(body: unknown, init?: { status?: number }) {
+      this.status = init?.status ?? 200;
+      mockConstructor(body, init);
+    }
+    static redirect = (...args: unknown[]) => mockRedirect(...args);
+    static next = (...args: unknown[]) => mockNext(...args);
+  }
+  return { NextResponse: MockNextResponse };
+});
 
 /* Import after mocks */
 import { middleware, config } from "../middleware";
@@ -23,13 +35,14 @@ import { middleware, config } from "../middleware";
 
 interface MockRequestOptions {
   pathname: string;
+  hostname?: string;
   cookies?: Record<string, string>;
 }
 
-function createMockRequest({ pathname, cookies = {} }: MockRequestOptions) {
+function createMockRequest({ pathname, hostname = "localhost", cookies = {} }: MockRequestOptions) {
   return {
-    nextUrl: { pathname },
-    url: `http://localhost:3000${pathname}`,
+    nextUrl: { pathname, hostname },
+    url: `http://${hostname}:3000${pathname}`,
     cookies: {
       get: (name: string) => {
         const value = cookies[name];
@@ -47,7 +60,9 @@ function createMockRequest({ pathname, cookies = {} }: MockRequestOptions) {
 /* ------------------------------------------------------------------ */
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  mockRedirect.mockClear();
+  mockNext.mockClear();
+  mockConstructor.mockClear();
 });
 
 /* ================================================================== */
@@ -164,6 +179,77 @@ describe("Authenticated user with __session cookie passes through", () => {
     middleware(request);
 
     expect(mockNext).toHaveBeenCalledTimes(1);
+  });
+});
+
+/* ================================================================== */
+/* Runtime validation — production blocking                            */
+/* ================================================================== */
+
+describe("Runtime validation route — environment-based access control", () => {
+  it("allows /runtime-validation on localhost", () => {
+    const request = createMockRequest({ pathname: "/runtime-validation", hostname: "localhost" });
+
+    middleware(request);
+
+    expect(mockNext).toHaveBeenCalledTimes(1);
+    expect(mockConstructor).not.toHaveBeenCalled();
+  });
+
+  it("allows /runtime-validation on 127.0.0.1", () => {
+    const request = createMockRequest({ pathname: "/runtime-validation", hostname: "127.0.0.1" });
+
+    middleware(request);
+
+    expect(mockNext).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows /runtime-validation on prefpilot-stage.web.app", () => {
+    const request = createMockRequest({
+      pathname: "/runtime-validation",
+      hostname: "prefpilot-stage.web.app",
+    });
+
+    middleware(request);
+
+    expect(mockNext).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks /runtime-validation on production hostname with 404", () => {
+    const request = createMockRequest({
+      pathname: "/runtime-validation",
+      hostname: "nimblevitals.app",
+    });
+
+    const result = middleware(request);
+
+    expect(mockConstructor).toHaveBeenCalledWith(null, { status: 404 });
+    expect(result).toEqual({ type: "response", status: 404 });
+    expect(mockNext).not.toHaveBeenCalled();
+  });
+
+  it("blocks /runtime-validation on unknown hostname with 404", () => {
+    const request = createMockRequest({
+      pathname: "/runtime-validation",
+      hostname: "some-other-domain.com",
+    });
+
+    const result = middleware(request);
+
+    expect(mockConstructor).toHaveBeenCalledWith(null, { status: 404 });
+    expect(result).toEqual({ type: "response", status: 404 });
+  });
+
+  it("blocks nested /runtime-validation/ paths on production", () => {
+    const request = createMockRequest({
+      pathname: "/runtime-validation/something",
+      hostname: "nimblevitals.app",
+    });
+
+    const result = middleware(request);
+
+    expect(mockConstructor).toHaveBeenCalledWith(null, { status: 404 });
+    expect(result).toEqual({ type: "response", status: 404 });
   });
 });
 
