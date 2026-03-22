@@ -555,6 +555,15 @@ describe("Login form structure and accessibility", () => {
     expect(button).not.toBeDisabled();
   });
 
+  it("renders link to signup page", () => {
+    render(<LoginPage />);
+
+    const link = screen.getByTestId("login-signup-link");
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute("href", "/signup");
+    expect(link).toHaveTextContent("Create one");
+  });
+
   it("does not redirect when auth is still loading", () => {
     mockAuthLoading = true;
     mockUser = null;

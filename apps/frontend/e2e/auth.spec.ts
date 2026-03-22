@@ -1,11 +1,15 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * E2E scenarios for the Authentication flow (PERF-98) and App Shell (PERF-115).
+ * E2E scenarios for the Authentication flow (PERF-98), Signup (PERF-137),
+ * and App Shell (PERF-115).
  *
  * E-AUTH-001, E-AUTH-002: Public — login page renders correctly (no auth needed).
  * E-AUTH-003: Authenticated — valid sign-in redirects to /dashboard.
  * E-AUTH-004: Public — invalid credentials show error message.
+ * E-AUTH-005, E-AUTH-006: Public — signup page renders correctly (no auth needed).
+ * E-AUTH-007: Public — login page has link to signup.
+ * E-AUTH-008: Public — signup page has link to login.
  * E-SHELL-001: Public — middleware redirects unauthenticated users.
  * E-SHELL-002: Authenticated — navigation renders on authenticated pages.
  *
@@ -54,6 +58,45 @@ test.describe("Auth flow — /login", () => {
     // Error banner should appear with role="alert"
     await expect(page.getByTestId("login-error")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId("login-error")).toHaveAttribute("role", "alert");
+  });
+});
+
+test.describe("Signup flow — /signup (PERF-137)", () => {
+  // E-AUTH-005: Signup page renders without errors
+  test("E-AUTH-005 — signup page renders with heading and form", async ({ page }) => {
+    await page.context().clearCookies();
+    await page.goto("/signup");
+    await expect(page.getByTestId("signup-page")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Create your account/i })).toBeVisible();
+    await expect(page.getByTestId("signup-email-input")).toBeVisible();
+    await expect(page.getByTestId("signup-password-input")).toBeVisible();
+    await expect(page.getByTestId("signup-confirm-input")).toBeVisible();
+    await expect(page.getByTestId("signup-submit")).toBeVisible();
+  });
+
+  // E-AUTH-006: Signup page returns 200 (no 404/500)
+  test("E-AUTH-006 — signup page returns 200", async ({ page }) => {
+    await page.context().clearCookies();
+    const response = await page.goto("/signup");
+    expect(response?.status()).toBe(200);
+  });
+
+  // E-AUTH-007: Login page has link to signup
+  test("E-AUTH-007 — login page has link to signup", async ({ page }) => {
+    await page.context().clearCookies();
+    await page.goto("/login");
+    const signupLink = page.getByTestId("login-signup-link");
+    await expect(signupLink).toBeVisible();
+    await expect(signupLink).toHaveAttribute("href", "/signup");
+  });
+
+  // E-AUTH-008: Signup page has link to login
+  test("E-AUTH-008 — signup page has link to login", async ({ page }) => {
+    await page.context().clearCookies();
+    await page.goto("/signup");
+    const loginLink = page.getByTestId("signup-login-link");
+    await expect(loginLink).toBeVisible();
+    await expect(loginLink).toHaveAttribute("href", "/login");
   });
 });
 
