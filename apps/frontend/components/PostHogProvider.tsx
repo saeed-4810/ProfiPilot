@@ -22,7 +22,7 @@ import { setAnalyticsProvider, createPostHogProvider } from "@/lib/analytics";
 
 /** Default PostHog configuration from environment variables. */
 const DEFAULT_POSTHOG_KEY = process.env["NEXT_PUBLIC_POSTHOG_KEY"] ?? "";
-const DEFAULT_POSTHOG_HOST = process.env["NEXT_PUBLIC_POSTHOG_HOST"] ?? "https://eu.i.posthog.com";
+const DEFAULT_POSTHOG_HOST = process.env["NEXT_PUBLIC_POSTHOG_HOST"] ?? "https://us.i.posthog.com";
 
 interface PostHogProviderProps {
   readonly children: ReactNode;
