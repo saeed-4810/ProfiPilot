@@ -8,6 +8,7 @@
  * E-SHELL-001: page.goto('/dashboard') → URL becomes /login.
  *
  * Protected routes: /dashboard, /audit, /results, /export
+ * Restricted routes: /runtime-validation (staging/local only, blocked in production)
  * Public routes: /login, / (root)
  */
 
@@ -28,9 +29,28 @@ function isProtectedRoute(pathname: string): boolean {
   );
 }
 
+/**
+ * Check if the runtime-validation route is allowed in this environment.
+ * Allowed on: localhost, staging (prefpilot-stage).
+ * Blocked on: production (any other domain).
+ */
+function isRuntimeValidationAllowed(hostname: string): boolean {
+  return (
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname.includes("prefpilot-stage")
+  );
+}
+
 export function middleware(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
 
+  /* --- Runtime validation: block in production --- */
+  if (pathname === "/runtime-validation" || pathname.startsWith("/runtime-validation/")) {
+    if (!isRuntimeValidationAllowed(request.nextUrl.hostname)) {
+      return new NextResponse(null, { status: 404 });
+    }
+  }
+
+  /* --- Auth-protected routes --- */
   if (isProtectedRoute(pathname)) {
     const sessionCookie = request.cookies.get(SESSION_COOKIE);
 
@@ -44,9 +64,15 @@ export function middleware(request: NextRequest): NextResponse {
 }
 
 /**
- * Matcher config — only run middleware on protected routes.
+ * Matcher config — run middleware on protected routes + runtime-validation.
  * Excludes static assets, API routes, and Next.js internals.
  */
 export const config = {
-  matcher: ["/dashboard/:path*", "/audit/:path*", "/results/:path*", "/export/:path*"],
+  matcher: [
+    "/dashboard/:path*",
+    "/audit/:path*",
+    "/results/:path*",
+    "/export/:path*",
+    "/runtime-validation/:path*",
+  ],
 };

@@ -179,7 +179,11 @@ describe("Middleware config matcher", () => {
     expect(config.matcher).toContain("/export/:path*");
   });
 
-  it("has exactly 4 matcher patterns", () => {
-    expect(config.matcher).toHaveLength(4);
+  it("includes runtime-validation restricted route", () => {
+    expect(config.matcher).toContain("/runtime-validation/:path*");
+  });
+
+  it("has exactly 5 matcher patterns", () => {
+    expect(config.matcher).toHaveLength(5);
   });
 });
