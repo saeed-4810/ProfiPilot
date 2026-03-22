@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect, type FormEvent } from "react"
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { MotionWrapper } from "@/components/MotionWrapper";
+import { trackPageView, trackAuditTrigger } from "@/lib/analytics";
 import {
   createAudit,
   getAuditStatus,
@@ -64,8 +65,9 @@ export default function AuditPage() {
     }
   }, []);
 
-  /* --- Cleanup polling on unmount --- */
+  /* --- Track page view + cleanup polling on unmount --- */
   useEffect(() => {
+    trackPageView({ route: "/audit", timestamp: Date.now() });
     return () => {
       stopPolling();
     };
@@ -134,6 +136,7 @@ export default function AuditPage() {
       }
 
       // Transition to loading state
+      trackAuditTrigger({ url: parsed.data.url, timestamp: Date.now() });
       setPageState("loading");
       setAuditStatus("queued");
 

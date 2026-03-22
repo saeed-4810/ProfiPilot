@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { MotionWrapper } from "@/components/MotionWrapper";
+import { trackPageView, trackExportClick } from "@/lib/analytics";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
@@ -42,6 +43,11 @@ export default function ExportPage() {
   /* --- Refs --- */
   const errorRef = useRef<HTMLDivElement>(null);
 
+  /* --- Track page view on mount --- */
+  useEffect(() => {
+    trackPageView({ route: "/export", timestamp: Date.now() });
+  }, []);
+
   /* --- Export handler --- */
   const handleExport = useCallback(async () => {
     /* v8 ignore next 4 -- defensive guard: button only renders when hasAuditId is true */
@@ -50,6 +56,7 @@ export default function ExportPage() {
       return;
     }
 
+    trackExportClick({ format: selectedFormat, audit_id: auditId });
     setPageState("loading");
     setError(null);
 
