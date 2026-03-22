@@ -20,6 +20,7 @@ const mockUnsubscribe = vi.fn();
 
 const mockSignInWithEmailAndPassword = vi.fn();
 const mockCreateUserWithEmailAndPassword = vi.fn();
+const mockSendEmailVerification = vi.fn();
 const mockFirebaseSignOut = vi.fn();
 const mockGetIdToken = vi.fn();
 
@@ -36,6 +37,7 @@ vi.mock("firebase/auth", () => ({
   signInWithEmailAndPassword: (...args: unknown[]) => mockSignInWithEmailAndPassword(...args),
   createUserWithEmailAndPassword: (...args: unknown[]) =>
     mockCreateUserWithEmailAndPassword(...args),
+  sendEmailVerification: (...args: unknown[]) => mockSendEmailVerification(...args),
   signOut: (...args: unknown[]) => mockFirebaseSignOut(...args),
 }));
 
@@ -59,7 +61,8 @@ import { AuthProvider, useAuth, getAuthErrorMessage } from "../../lib/auth";
 /* ------------------------------------------------------------------ */
 
 function AuthConsumer() {
-  const { user, loading, error, signIn, signUp, signOut, getIdToken } = useAuth();
+  const { user, loading, error, signIn, signUp, sendVerificationEmail, signOut, getIdToken } =
+    useAuth();
   return createElement("div", null, [
     createElement("span", { key: "loading", "data-testid": "auth-loading" }, String(loading)),
     createElement(
@@ -93,6 +96,17 @@ function AuthConsumer() {
         },
       },
       "Sign Up"
+    ),
+    createElement(
+      "button",
+      {
+        key: "resend-verification",
+        "data-testid": "auth-resend-verification-btn",
+        onClick: () => {
+          sendVerificationEmail().catch(() => {});
+        },
+      },
+      "Resend Verification"
     ),
     createElement(
       "button",
@@ -258,7 +272,11 @@ describe("signIn: Firebase auth → POST /auth/verify-token", () => {
     mockSignInWithEmailAndPassword.mockResolvedValue({
       user: { getIdToken: () => Promise.resolve("mock-id-token"), email: "test@example.com" },
     });
-    mockFetch.mockResolvedValue({ ok: false, status: 500 });
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: () => Promise.resolve({ code: "INTERNAL_ERROR", message: "Server error" }),
+    });
 
     const user = userEvent.setup();
     renderWithProvider();
@@ -314,18 +332,142 @@ describe("signIn: Firebase auth → POST /auth/verify-token", () => {
       expect(screen.getByTestId("auth-error")).toHaveTextContent("Sign-in failed.");
     });
   });
+
+  it("throws error with code auth/email-not-verified when server returns 403 AUTH_EMAIL_NOT_VERIFIED", async () => {
+    mockSignInWithEmailAndPassword.mockResolvedValue({
+      user: { getIdToken: () => Promise.resolve("mock-id-token"), email: "unverified@example.com" },
+    });
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: () =>
+        Promise.resolve({
+          code: "AUTH_EMAIL_NOT_VERIFIED",
+          message: "Please verify your email address before signing in.",
+        }),
+    });
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await user.click(screen.getByTestId("auth-sign-in-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-error")).toHaveTextContent(
+        "Please verify your email address before signing in."
+      );
+    });
+  });
+
+  it("uses fallback message when server returns AUTH_EMAIL_NOT_VERIFIED without message", async () => {
+    mockSignInWithEmailAndPassword.mockResolvedValue({
+      user: { getIdToken: () => Promise.resolve("mock-id-token"), email: "unverified@example.com" },
+    });
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: () => Promise.resolve({ code: "AUTH_EMAIL_NOT_VERIFIED" }),
+    });
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await user.click(screen.getByTestId("auth-sign-in-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-error")).toHaveTextContent(
+        "Please verify your email address before signing in."
+      );
+    });
+  });
+
+  it("falls back to generic error when server returns non-JSON 403", async () => {
+    mockSignInWithEmailAndPassword.mockResolvedValue({
+      user: { getIdToken: () => Promise.resolve("mock-id-token"), email: "test@example.com" },
+    });
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: () => Promise.reject(new Error("Not JSON")),
+    });
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await user.click(screen.getByTestId("auth-sign-in-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-error")).toHaveTextContent(
+        "Failed to verify session with server."
+      );
+    });
+  });
 });
 
 /* ================================================================== */
-/* T-PERF-137-001: signUp creates account and establishes session      */
+/* T-PERF-138-003: sendVerificationEmail resends to current user       */
 /* ================================================================== */
 
-describe("T-PERF-137-001: signUp creates account via createUserWithEmailAndPassword", () => {
-  it("calls createUserWithEmailAndPassword and POST /auth/verify-token", async () => {
-    mockCreateUserWithEmailAndPassword.mockResolvedValue({
-      user: { getIdToken: () => Promise.resolve("mock-id-token"), email: "new@example.com" },
+describe("T-PERF-138-003: sendVerificationEmail resends to current user", () => {
+  it("calls sendEmailVerification on the current user", async () => {
+    const mockUser = { email: "test@example.com" };
+    mockGetFirebaseAuth.mockReturnValue({ currentUser: mockUser });
+    mockSendEmailVerification.mockResolvedValue(undefined);
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(mockUser);
     });
-    mockFetch.mockResolvedValue({ ok: true });
+
+    await user.click(screen.getByTestId("auth-resend-verification-btn"));
+
+    await waitFor(() => {
+      expect(mockSendEmailVerification).toHaveBeenCalledWith(mockUser);
+    });
+  });
+
+  it("throws error when no user is signed in", async () => {
+    mockGetFirebaseAuth.mockReturnValue({ currentUser: null });
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    // The button click will throw — but the catch in AuthConsumer swallows it
+    await user.click(screen.getByTestId("auth-resend-verification-btn"));
+
+    // No crash — the error is caught by the .catch() in AuthConsumer
+    expect(mockSendEmailVerification).not.toHaveBeenCalled();
+  });
+});
+
+/* ================================================================== */
+/* T-PERF-138-002: signUp creates account and sends verification email */
+/* ================================================================== */
+
+describe("T-PERF-138-002: signUp creates account and sends verification email (ADR-028)", () => {
+  it("calls createUserWithEmailAndPassword and sendEmailVerification (no verify-token)", async () => {
+    const mockUser = { email: "new@example.com" };
+    mockCreateUserWithEmailAndPassword.mockResolvedValue({ user: mockUser });
+    mockSendEmailVerification.mockResolvedValue(undefined);
+    mockFirebaseSignOut.mockResolvedValue(undefined);
 
     const user = userEvent.setup();
     renderWithProvider();
@@ -342,14 +484,10 @@ describe("T-PERF-137-001: signUp creates account via createUserWithEmailAndPassw
         "new@example.com",
         "password123"
       );
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining("/auth/verify-token"),
-        expect.objectContaining({
-          method: "POST",
-          credentials: "include",
-          body: JSON.stringify({ idToken: "mock-id-token" }),
-        })
-      );
+      expect(mockSendEmailVerification).toHaveBeenCalledWith(mockUser);
+      expect(mockFirebaseSignOut).toHaveBeenCalled();
+      // verify-token should NOT be called — email must be verified first
+      expect(mockFetch).not.toHaveBeenCalled();
     });
   });
 
@@ -374,11 +512,10 @@ describe("T-PERF-137-001: signUp creates account via createUserWithEmailAndPassw
     });
   });
 
-  it("sets error state when verify-token fails after signUp", async () => {
-    mockCreateUserWithEmailAndPassword.mockResolvedValue({
-      user: { getIdToken: () => Promise.resolve("mock-id-token"), email: "new@example.com" },
-    });
-    mockFetch.mockResolvedValue({ ok: false, status: 500 });
+  it("sets error state when sendEmailVerification fails", async () => {
+    const mockUser = { email: "new@example.com" };
+    mockCreateUserWithEmailAndPassword.mockResolvedValue({ user: mockUser });
+    mockSendEmailVerification.mockRejectedValue(new Error("Too many requests"));
 
     const user = userEvent.setup();
     renderWithProvider();
@@ -390,9 +527,7 @@ describe("T-PERF-137-001: signUp creates account via createUserWithEmailAndPassw
     await user.click(screen.getByTestId("auth-sign-up-btn"));
 
     await waitFor(() => {
-      expect(screen.getByTestId("auth-error")).toHaveTextContent(
-        "Failed to verify session with server."
-      );
+      expect(screen.getByTestId("auth-error")).toHaveTextContent("Too many requests");
     });
   });
 
@@ -592,6 +727,11 @@ describe("getAuthErrorMessage", () => {
   it("returns mapped message for auth/weak-password", () => {
     const err = Object.assign(new Error("Firebase: Error"), { code: "auth/weak-password" });
     expect(getAuthErrorMessage(err)).toBe("Password must be at least 6 characters.");
+  });
+
+  it("returns mapped message for auth/email-not-verified", () => {
+    const err = Object.assign(new Error("Server error"), { code: "auth/email-not-verified" });
+    expect(getAuthErrorMessage(err)).toBe("Please verify your email address before signing in.");
   });
 
   it("returns error.message for non-Firebase errors with message", () => {

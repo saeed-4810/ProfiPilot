@@ -35,6 +35,7 @@ vi.mock("@/lib/auth", () => ({
         "auth/wrong-password": "Incorrect password. Please try again.",
         "auth/invalid-email": "Please enter a valid email address.",
         "auth/user-disabled": "This account has been disabled. Contact support.",
+        "auth/email-not-verified": "Please verify your email address before signing in.",
       };
       if (firebaseError.code !== undefined && firebaseError.code in messages) {
         return messages[firebaseError.code] as string;
@@ -338,6 +339,57 @@ describe("U-PERF-98-002: Login form shows error banner on failure", () => {
       expect(screen.getByRole("alert")).toHaveTextContent(
         "Network error. Check your connection and try again."
       );
+    });
+  });
+});
+
+/* ================================================================== */
+/* U-PERF-138-003: Login shows verify-email link for unverified users  */
+/* ================================================================== */
+
+describe("U-PERF-138-003: Login page shows verify-email error for unverified users", () => {
+  it("shows verify-email link when error is auth/email-not-verified", async () => {
+    const err = Object.assign(new Error("Please verify your email address before signing in."), {
+      code: "auth/email-not-verified",
+    });
+    mockSignIn.mockRejectedValue(err);
+
+    const user = userEvent.setup();
+    render(<LoginPage />);
+
+    await user.type(screen.getByTestId("login-email-input"), "unverified@example.com");
+    await user.type(screen.getByTestId("login-password-input"), "password123");
+    await user.click(screen.getByTestId("login-submit"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("login-error")).toBeInTheDocument();
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Please verify your email address before signing in."
+      );
+      expect(screen.getByTestId("login-verify-email-link")).toBeInTheDocument();
+      expect(screen.getByTestId("login-verify-email-link")).toHaveAttribute(
+        "href",
+        "/verify-email"
+      );
+    });
+  });
+
+  it("does not show verify-email link for other errors", async () => {
+    const err = Object.assign(new Error("Invalid credentials"), {
+      code: "auth/invalid-credential",
+    });
+    mockSignIn.mockRejectedValue(err);
+
+    const user = userEvent.setup();
+    render(<LoginPage />);
+
+    await user.type(screen.getByTestId("login-email-input"), "test@example.com");
+    await user.type(screen.getByTestId("login-password-input"), "wrong");
+    await user.click(screen.getByTestId("login-submit"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("login-error")).toBeInTheDocument();
+      expect(screen.queryByTestId("login-verify-email-link")).not.toBeInTheDocument();
     });
   });
 });

@@ -39,7 +39,7 @@ beforeEach(() => {
 describe("T-AUTH-001: POST /auth/verify-token (valid token)", () => {
   it("returns 200 and sets session cookie for a valid ID token", async () => {
     const now = Math.floor(Date.now() / 1000);
-    mockVerifyIdToken.mockResolvedValue({ uid: "user-123", iat: now });
+    mockVerifyIdToken.mockResolvedValue({ uid: "user-123", iat: now, email_verified: true });
     mockCreateSessionCookie.mockResolvedValue("mock-session-cookie-value");
 
     const res = await request(app)
@@ -62,6 +62,58 @@ describe("T-AUTH-001: POST /auth/verify-token (valid token)", () => {
     expect(mockCreateSessionCookie).toHaveBeenCalledWith("valid-firebase-id-token", {
       expiresIn: 5 * 24 * 60 * 60 * 1000,
     });
+  });
+});
+
+// T-PERF-138-001: Verify unverified email → 403 AUTH_EMAIL_NOT_VERIFIED
+describe("T-PERF-138-001: POST /auth/verify-token (email not verified)", () => {
+  it("returns 403 when email_verified is false", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    mockVerifyIdToken.mockResolvedValue({
+      uid: "user-unverified",
+      iat: now,
+      email_verified: false,
+    });
+
+    const res = await request(app)
+      .post("/auth/verify-token")
+      .send({ idToken: "unverified-email-token" });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({
+      status: 403,
+      code: "AUTH_EMAIL_NOT_VERIFIED",
+      message: "Please verify your email address before signing in.",
+    });
+    expect(res.body.traceId).toBeDefined();
+    expect(mockCreateSessionCookie).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when email_verified is undefined (missing field)", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    mockVerifyIdToken.mockResolvedValue({ uid: "user-no-field", iat: now });
+
+    const res = await request(app)
+      .post("/auth/verify-token")
+      .send({ idToken: "no-email-verified-field" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("AUTH_EMAIL_NOT_VERIFIED");
+    expect(mockCreateSessionCookie).not.toHaveBeenCalled();
+  });
+
+  it("allows verified email (email_verified: true) to proceed", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    mockVerifyIdToken.mockResolvedValue({ uid: "user-verified", iat: now, email_verified: true });
+    mockCreateSessionCookie.mockResolvedValue("mock-session-cookie");
+
+    const res = await request(app)
+      .post("/auth/verify-token")
+      .send({ idToken: "verified-email-token" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ status: "authenticated", uid: "user-verified" });
+    expect(mockCreateSessionCookie).toHaveBeenCalled();
   });
 });
 
@@ -181,7 +233,7 @@ describe("T-AUTH-002b: POST /auth/verify-token (AppError passthrough)", () => {
 
   it("handles createSessionCookie failure as AUTH_TOKEN_INVALID", async () => {
     const now = Math.floor(Date.now() / 1000);
-    mockVerifyIdToken.mockResolvedValue({ uid: "user-ok", iat: now });
+    mockVerifyIdToken.mockResolvedValue({ uid: "user-ok", iat: now, email_verified: true });
     mockCreateSessionCookie.mockRejectedValue(new Error("Firebase session cookie creation failed"));
 
     const res = await request(app)
@@ -197,8 +249,8 @@ describe("T-AUTH-002b: POST /auth/verify-token (AppError passthrough)", () => {
     // Import AppError to throw it from the mock
     const { AppError } = await import("../src/domain/errors.js");
     const now = Math.floor(Date.now() / 1000);
-    mockVerifyIdToken.mockResolvedValue({ uid: "user-ok", iat: now });
-    // createSessionCookie throws an AppError (defensive path — lines 60-63)
+    mockVerifyIdToken.mockResolvedValue({ uid: "user-ok", iat: now, email_verified: true });
+    // createSessionCookie throws an AppError (defensive path)
     mockCreateSessionCookie.mockRejectedValue(
       new AppError(429, "RATE_LIMITED", "Too many session cookie requests.")
     );

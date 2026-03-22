@@ -33,6 +33,8 @@ export type TelemetryEvent =
   | "page_view"
   | "login_attempt"
   | "signup_attempt"
+  | "email_verification_sent"
+  | "email_verification_blocked"
   | "audit_trigger"
   | "results_view"
   | "export_click";
@@ -52,6 +54,17 @@ export interface LoginAttemptPayload {
 /** Payload for signup_attempt event. */
 export interface SignupAttemptPayload {
   readonly method: string;
+  readonly timestamp: number;
+}
+
+/** Payload for email_verification_sent event. */
+export interface EmailVerificationSentPayload {
+  readonly method: "auto" | "resend";
+  readonly timestamp: number;
+}
+
+/** Payload for email_verification_blocked event. */
+export interface EmailVerificationBlockedPayload {
   readonly timestamp: number;
 }
 
@@ -157,6 +170,16 @@ export function trackLoginAttempt(payload: LoginAttemptPayload): void {
 /** T-PERF-137-001: signup_attempt — fires on signup button click. */
 export function trackSignupAttempt(payload: SignupAttemptPayload): void {
   track("signup_attempt", { ...payload });
+}
+
+/** T-PERF-138-002: email_verification_sent — fires after signup and on resend. */
+export function trackEmailVerificationSent(payload: EmailVerificationSentPayload): void {
+  track("email_verification_sent", { ...payload });
+}
+
+/** T-PERF-138-001: email_verification_blocked — fires on login with unverified email. */
+export function trackEmailVerificationBlocked(payload: EmailVerificationBlockedPayload): void {
+  track("email_verification_blocked", { ...payload });
 }
 
 /** T-PERF-122-007: audit_trigger — fires on audit form submit. */

@@ -10,6 +10,7 @@ import { test, expect } from "@playwright/test";
  * E-AUTH-005, E-AUTH-006: Public — signup page renders correctly (no auth needed).
  * E-AUTH-007: Public — login page has link to signup.
  * E-AUTH-008: Public — signup page has link to login.
+ * E-AUTH-009, E-AUTH-010: Public — verify-email page renders correctly (no auth needed).
  * E-SHELL-001: Public — middleware redirects unauthenticated users.
  * E-SHELL-002: Authenticated — navigation renders on authenticated pages.
  *
@@ -97,6 +98,27 @@ test.describe("Signup flow — /signup (PERF-137)", () => {
     const loginLink = page.getByTestId("signup-login-link");
     await expect(loginLink).toBeVisible();
     await expect(loginLink).toHaveAttribute("href", "/login");
+  });
+});
+
+test.describe("Email verification — /verify-email (PERF-138)", () => {
+  // E-AUTH-009: Verify-email page renders with heading and resend button
+  test("E-AUTH-009 — verify-email page renders with heading and resend button", async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await page.goto("/verify-email");
+    await expect(page.getByTestId("verify-email-page")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Check your email/i })).toBeVisible();
+    await expect(page.getByTestId("verify-email-resend")).toBeVisible();
+    await expect(page.getByTestId("verify-email-login-link")).toBeVisible();
+  });
+
+  // E-AUTH-010: Verify-email page returns 200
+  test("E-AUTH-010 — verify-email page returns 200", async ({ page }) => {
+    await page.context().clearCookies();
+    const response = await page.goto("/verify-email");
+    expect(response?.status()).toBe(200);
   });
 });
 
