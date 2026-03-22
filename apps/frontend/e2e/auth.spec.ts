@@ -101,6 +101,26 @@ test.describe("Signup flow — /signup (PERF-137)", () => {
   });
 });
 
+test.describe("Google Sign-In — PERF-139", () => {
+  // E-AUTH-011: Login page renders Google Sign-In button
+  test("E-AUTH-011 — login page renders Google Sign-In button", async ({ page }) => {
+    await page.context().clearCookies();
+    await page.goto("/login");
+    const btn = page.getByTestId("google-signin-btn");
+    await expect(btn).toBeVisible();
+    await expect(btn).toContainText("Continue with Google");
+  });
+
+  // E-AUTH-012: Signup page renders Google Sign-In button
+  test("E-AUTH-012 — signup page renders Google Sign-In button", async ({ page }) => {
+    await page.context().clearCookies();
+    await page.goto("/signup");
+    const btn = page.getByTestId("google-signin-btn");
+    await expect(btn).toBeVisible();
+    await expect(btn).toContainText("Continue with Google");
+  });
+});
+
 test.describe("Email verification — /verify-email (PERF-138)", () => {
   // E-AUTH-009: Verify-email page renders with heading and resend button
   test("E-AUTH-009 — verify-email page renders with heading and resend button", async ({
