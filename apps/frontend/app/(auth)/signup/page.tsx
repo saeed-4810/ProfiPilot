@@ -131,13 +131,13 @@ export default function SignupPage() {
       isSigningUp.current = true;
 
       try {
-        /* P-PERF-137-001: Create account with valid credentials */
+        /* P-PERF-138-001: Create account and send verification email (ADR-028) */
         await signUp(parsed.data.email, parsed.data.password);
 
-        /* Success — redirect to dashboard (cookie is now set) */
+        /* Success — redirect to /verify-email (no session cookie — email must be verified first) */
         isSigningUp.current = false;
         setPageState("success");
-        router.push("/dashboard");
+        router.push("/verify-email");
       } catch (err: unknown) {
         /* P-PERF-137-002: Existing email → error shown */
         /* U-PERF-137-002: Error banner with role="alert" */
@@ -192,8 +192,8 @@ export default function SignupPage() {
               className="flex flex-col items-center gap-4 mt-6"
             >
               <p className="text-green-400 text-sm font-medium">
-                {/* copy: signup-success */}
-                Account created successfully. Redirecting...
+                {/* copy: signup-success-verify */}
+                Account created! Check your email to verify your address.
               </p>
             </div>
           )}

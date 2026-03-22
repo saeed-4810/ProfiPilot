@@ -2,17 +2,19 @@
 
 /**
  * Auth Context Provider — tracks Firebase Auth state and provides
- * signIn / signUp / signOut / getIdToken methods to the component tree.
+ * signIn / signUp / signOut / sendVerificationEmail / getIdToken methods.
  *
- * Per ADR-010 session lifecycle:
- *   1. signIn: Firebase signInWithEmailAndPassword → POST /auth/verify-token (sets __session cookie)
- *   2. signUp: Firebase createUserWithEmailAndPassword → POST /auth/verify-token (sets __session cookie)
+ * Per ADR-010 + ADR-028 session lifecycle:
+ *   1. signUp: Firebase createUserWithEmailAndPassword → sendEmailVerification → redirect /verify-email
+ *      (does NOT call POST /auth/verify-token — email must be verified first)
+ *   2. signIn: Firebase signInWithEmailAndPassword → POST /auth/verify-token
+ *      (server checks email_verified === true; returns 403 AUTH_EMAIL_NOT_VERIFIED if false)
  *   3. signOut: POST /auth/logout (clears cookie) → Firebase signOut
  *   4. onAuthStateChanged: keeps user/loading/error in sync
  *
  * T-SHELL-002: AuthProvider tracks auth state changes via onAuthStateChanged.
  * T-SHELL-005: Sign-out clears session and redirects.
- * T-PERF-137-001: signUp creates account and establishes server session.
+ * T-PERF-138-002: signUp calls sendEmailVerification after account creation.
  */
 
 import {
@@ -28,6 +30,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   signOut as firebaseSignOut,
   type User,
 } from "firebase/auth";
@@ -49,8 +52,10 @@ export interface AuthState {
 export interface AuthContextValue extends AuthState {
   /** Sign in with email + password. Sets server-side session cookie. */
   signIn: (email: string, password: string) => Promise<void>;
-  /** Sign up with email + password. Creates account and sets server-side session cookie. */
+  /** Sign up with email + password. Sends verification email (no session cookie). */
   signUp: (email: string, password: string) => Promise<void>;
+  /** Resend verification email to the current Firebase user. */
+  sendVerificationEmail: () => Promise<void>;
   /** Sign out. Clears server-side session cookie and Firebase session. */
   signOut: () => Promise<void>;
   /** Get the current user's ID token (for manual API calls). */
@@ -132,6 +137,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
       });
 
       if (!response.ok) {
+        // T-PERF-138-001: Parse server error for AUTH_EMAIL_NOT_VERIFIED (ADR-028)
+        const body = (await response.json().catch(() => null)) as {
+          code?: string;
+          message?: string;
+        } | null;
+        if (body?.code === "AUTH_EMAIL_NOT_VERIFIED") {
+          throw Object.assign(
+            new Error(body.message ?? "Please verify your email address before signing in."),
+            { code: "auth/email-not-verified" }
+          );
+        }
         throw new Error("Failed to verify session with server.");
       }
 
@@ -143,32 +159,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, []);
 
-  /* --- signUp: Firebase create account → server session cookie --- */
+  /* --- signUp: Firebase create account → send verification email (ADR-028) --- */
   const signUp = useCallback(async (email: string, password: string): Promise<void> => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const auth = getFirebaseAuth();
       const credential = await createUserWithEmailAndPassword(auth, email, password);
-      const idToken = await credential.user.getIdToken();
 
-      // POST /auth/verify-token to set __session cookie (per ADR-010)
-      const response = await fetch(`${API_BASE}/auth/verify-token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ idToken }),
-      });
+      // T-PERF-138-002: Send verification email instead of establishing session
+      await sendEmailVerification(credential.user);
 
-      if (!response.ok) {
-        throw new Error("Failed to verify session with server.");
-      }
+      // Sign out the Firebase client — user must verify email before signing in
+      await firebaseSignOut(auth);
 
-      // onAuthStateChanged will update state with the user
+      // onAuthStateChanged will update state to user: null
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Sign-up failed.";
       setState((prev) => ({ ...prev, loading: false, error: message }));
       throw err;
     }
+  }, []);
+
+  /* --- sendVerificationEmail: resend verification email to current user --- */
+  const sendVerificationEmail = useCallback(async (): Promise<void> => {
+    const auth = getFirebaseAuth();
+    const currentUser = auth.currentUser;
+    if (currentUser === null) {
+      throw new Error("No user is currently signed in.");
+    }
+    await sendEmailVerification(currentUser);
   }, []);
 
   /* --- signOut: server logout → Firebase signOut --- */
@@ -206,10 +225,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
       error: state.error,
       signIn,
       signUp,
+      sendVerificationEmail,
       signOut,
       getIdToken,
     }),
-    [state.user, state.loading, state.error, signIn, signUp, signOut, getIdToken]
+    [
+      state.user,
+      state.loading,
+      state.error,
+      signIn,
+      signUp,
+      sendVerificationEmail,
+      signOut,
+      getIdToken,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -229,6 +258,7 @@ const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   "auth/network-request-failed": "Network error. Check your connection and try again.",
   "auth/email-already-in-use": "An account with this email already exists.",
   "auth/weak-password": "Password must be at least 6 characters.",
+  "auth/email-not-verified": "Please verify your email address before signing in.",
 };
 
 const DEFAULT_AUTH_ERROR = "An unexpected error occurred. Please try again.";

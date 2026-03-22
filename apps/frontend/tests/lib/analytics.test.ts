@@ -9,6 +9,8 @@ import {
   trackPageView,
   trackLoginAttempt,
   trackSignupAttempt,
+  trackEmailVerificationSent,
+  trackEmailVerificationBlocked,
   trackAuditTrigger,
   trackResultsView,
   trackExportClick,
@@ -184,6 +186,29 @@ describe("T-PERF-122-007: Typed event helpers match ADR-002 telemetry contract",
     expect(mock.capture).toHaveBeenCalledWith("signup_attempt", {
       method: "email",
       timestamp: 3000,
+    });
+  });
+
+  it("trackEmailVerificationSent sends email_verification_sent with method and timestamp", () => {
+    const mock = createMockProvider();
+    setAnalyticsProvider(mock);
+
+    trackEmailVerificationSent({ method: "auto", timestamp: 4000 });
+
+    expect(mock.capture).toHaveBeenCalledWith("email_verification_sent", {
+      method: "auto",
+      timestamp: 4000,
+    });
+  });
+
+  it("trackEmailVerificationBlocked sends email_verification_blocked with timestamp", () => {
+    const mock = createMockProvider();
+    setAnalyticsProvider(mock);
+
+    trackEmailVerificationBlocked({ timestamp: 5000 });
+
+    expect(mock.capture).toHaveBeenCalledWith("email_verification_blocked", {
+      timestamp: 5000,
     });
   });
 
@@ -369,6 +394,8 @@ describe("U-PERF-122-001: Graceful degradation without provider", () => {
     expect(() => trackPageView({ route: "/", timestamp: 0 })).not.toThrow();
     expect(() => trackLoginAttempt({ method: "email", timestamp: 0 })).not.toThrow();
     expect(() => trackSignupAttempt({ method: "email", timestamp: 0 })).not.toThrow();
+    expect(() => trackEmailVerificationSent({ method: "auto", timestamp: 0 })).not.toThrow();
+    expect(() => trackEmailVerificationBlocked({ timestamp: 0 })).not.toThrow();
     expect(() => trackAuditTrigger({ url: "https://x.com", timestamp: 0 })).not.toThrow();
     expect(() => trackResultsView({ audit_id: "x", timestamp: 0 })).not.toThrow();
     expect(() => trackExportClick({ format: "pdf", audit_id: "x" })).not.toThrow();

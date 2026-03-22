@@ -81,8 +81,8 @@ async function fillAndSubmit(
 /* P-PERF-137-001: Valid credentials → account created, redirect       */
 /* ================================================================== */
 
-describe("P-PERF-137-001: New user creates account with valid email/password", () => {
-  it("calls signUp and redirects to /dashboard on success", async () => {
+describe("P-PERF-138-001: New user creates account and redirects to /verify-email", () => {
+  it("calls signUp and redirects to /verify-email on success", async () => {
     mockSignUp.mockResolvedValue(undefined);
 
     const user = userEvent.setup();
@@ -92,7 +92,7 @@ describe("P-PERF-137-001: New user creates account with valid email/password", (
 
     await waitFor(() => {
       expect(mockSignUp).toHaveBeenCalledWith("new@example.com", "password123");
-      expect(mockPush).toHaveBeenCalledWith("/dashboard");
+      expect(mockPush).toHaveBeenCalledWith("/verify-email");
     });
   });
 
@@ -106,7 +106,9 @@ describe("P-PERF-137-001: New user creates account with valid email/password", (
 
     await waitFor(() => {
       expect(screen.getByTestId("signup-success")).toBeInTheDocument();
-      expect(screen.getByText("Account created successfully. Redirecting...")).toBeInTheDocument();
+      expect(
+        screen.getByText("Account created! Check your email to verify your address.")
+      ).toBeInTheDocument();
     });
   });
 
@@ -417,11 +419,11 @@ describe("U-PERF-137-005: Framer Motion entry animation plays on /signup load", 
 });
 
 /* ================================================================== */
-/* T-PERF-137-001: Firebase createUserWithEmailAndPassword → verify    */
+/* T-PERF-138-002: Firebase createUserWithEmailAndPassword → verify-email */
 /* ================================================================== */
 
-describe("T-PERF-137-001: Firebase createUserWithEmailAndPassword → verify-token", () => {
-  it("calls signUp which internally calls verify-token endpoint", async () => {
+describe("T-PERF-138-002: Firebase createUserWithEmailAndPassword → sendEmailVerification", () => {
+  it("calls signUp and redirects to /verify-email (not /dashboard)", async () => {
     mockSignUp.mockResolvedValue(undefined);
 
     const user = userEvent.setup();
@@ -431,7 +433,7 @@ describe("T-PERF-137-001: Firebase createUserWithEmailAndPassword → verify-tok
 
     await waitFor(() => {
       expect(mockSignUp).toHaveBeenCalledWith("new@example.com", "validpassword");
-      expect(mockPush).toHaveBeenCalledWith("/dashboard");
+      expect(mockPush).toHaveBeenCalledWith("/verify-email");
     });
   });
 });

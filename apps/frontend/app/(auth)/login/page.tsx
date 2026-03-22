@@ -25,7 +25,7 @@ import Link from "next/link";
 import { z } from "zod";
 import { MotionWrapper } from "@/components/MotionWrapper";
 import { useAuth, getAuthErrorMessage } from "@/lib/auth";
-import { trackPageView, trackLoginAttempt } from "@/lib/analytics";
+import { trackPageView, trackLoginAttempt, trackEmailVerificationBlocked } from "@/lib/analytics";
 
 /* ------------------------------------------------------------------ */
 /* Zod schema — client-side validation                                 */
@@ -54,6 +54,8 @@ export default function LoginPage() {
   const [pageState, setPageState] = useState<PageState>("empty");
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  /** U-PERF-138-003: Track if error is specifically email-not-verified */
+  const [isEmailNotVerified, setIsEmailNotVerified] = useState(false);
 
   /* --- Refs --- */
   const emailInputRef = useRef<HTMLInputElement>(null);
@@ -124,7 +126,14 @@ export default function LoginPage() {
       } catch (err: unknown) {
         /* P-PERF-98-002: Invalid credentials → error shown */
         /* U-PERF-98-002: Error banner with role="alert" */
+        /* U-PERF-138-003: Detect email-not-verified error for specific UX */
         isSigningIn.current = false;
+        const firebaseErr = err as Error & { code?: string };
+        const emailNotVerified = firebaseErr.code === "auth/email-not-verified";
+        setIsEmailNotVerified(emailNotVerified);
+        if (emailNotVerified) {
+          trackEmailVerificationBlocked({ timestamp: Date.now() });
+        }
         const message = getAuthErrorMessage(err);
         setError(message);
         setPageState("error");
@@ -161,6 +170,18 @@ export default function LoginPage() {
               className="mb-4 p-3 rounded bg-red-900/50 border border-red-500 text-red-200 text-sm"
             >
               {error}
+              {/* U-PERF-138-003: Show verify-email link when email is not verified */}
+              {isEmailNotVerified && (
+                <p className="mt-2">
+                  <Link
+                    href="/verify-email"
+                    data-testid="login-verify-email-link"
+                    className="text-blue-400 hover:text-blue-300 underline"
+                  >
+                    Resend verification email
+                  </Link>
+                </p>
+              )}
             </div>
           )}
 

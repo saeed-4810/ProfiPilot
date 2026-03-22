@@ -11,6 +11,8 @@ export const authRouter: RouterType = Router();
  * POST /auth/verify-token
  * CTR-001: Verify Firebase ID token and set session cookie.
  * Per ADR-010 step 1-2: Client authenticates → server verifies → sets HTTP-only session cookie.
+ * Per ADR-028: Rejects tokens where email_verified !== true (403 AUTH_EMAIL_NOT_VERIFIED).
+ * Google OAuth tokens always have email_verified: true — gate passes automatically.
  */
 authRouter.post(
   "/verify-token",
@@ -32,6 +34,18 @@ authRouter.post(
       const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
       if (issuedAt < fiveMinutesAgo) {
         next(new AppError(401, "AUTH_TOKEN_STALE", "Token is too old. Please re-authenticate."));
+        return;
+      }
+
+      // T-PERF-138-001: Require verified email before establishing session (ADR-028)
+      if (decoded.email_verified !== true) {
+        next(
+          new AppError(
+            403,
+            "AUTH_EMAIL_NOT_VERIFIED",
+            "Please verify your email address before signing in."
+          )
+        );
         return;
       }
 
