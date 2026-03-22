@@ -16,7 +16,7 @@ import path from "path";
  * On staging CI: set via GitHub Secrets.
  */
 
-const AUTH_STATE_PATH = path.join(import.meta.dirname, ".auth", "user.json");
+const AUTH_STATE_PATH = path.join(__dirname, ".auth", "user.json");
 
 setup("authenticate via login page", async ({ page }) => {
   const email = process.env["E2E_TEST_EMAIL"];

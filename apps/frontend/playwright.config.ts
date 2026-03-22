@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import path from "path";
-import { readFileSync, existsSync } from "fs";
+import fs from "fs";
 
 /**
  * Local/CI Playwright config.
@@ -23,9 +23,9 @@ import { readFileSync, existsSync } from "fs";
  */
 
 /* Load .env.local for E2E_TEST_EMAIL/PASSWORD (Playwright doesn't auto-load Next.js env files) */
-const envLocalPath = path.join(import.meta.dirname, ".env.local");
-if (existsSync(envLocalPath)) {
-  const envContent = readFileSync(envLocalPath, "utf-8");
+const envLocalPath = path.join(__dirname, ".env.local");
+if (fs.existsSync(envLocalPath)) {
+  const envContent = fs.readFileSync(envLocalPath, "utf-8");
   for (const line of envContent.split("\n")) {
     const trimmed = line.trim();
     if (trimmed === "" || trimmed.startsWith("#")) continue;
@@ -40,7 +40,7 @@ if (existsSync(envLocalPath)) {
 }
 
 const hasCredentials = !!process.env["E2E_TEST_EMAIL"];
-const AUTH_STATE_PATH = path.join(import.meta.dirname, "e2e", ".auth", "user.json");
+const AUTH_STATE_PATH = path.join(__dirname, "e2e", ".auth", "user.json");
 
 const projects = hasCredentials
   ? [

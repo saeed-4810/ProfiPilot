@@ -22,7 +22,7 @@ import { defineConfig, devices } from "@playwright/test";
 import path from "path";
 
 const STAGING_URL = process.env["E2E_BASE_URL"] ?? "https://prefpilot-stage.web.app";
-const AUTH_STATE_PATH = path.join(import.meta.dirname, "e2e", ".auth", "user.json");
+const AUTH_STATE_PATH = path.join(__dirname, "e2e", ".auth", "user.json");
 
 export default defineConfig({
   testDir: "./e2e",
