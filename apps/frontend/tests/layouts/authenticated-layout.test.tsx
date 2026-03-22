@@ -34,6 +34,10 @@ vi.mock("@/lib/firebase-client", () => ({
   getFirebaseAuth: () => ({ currentUser: null }),
 }));
 
+/* Global fetch mock for GET /auth/session */
+const mockFetch = vi.fn();
+globalThis.fetch = mockFetch;
+
 /* Import after mocks */
 import AuthenticatedLayout from "../../app/(authenticated)/layout";
 
@@ -45,6 +49,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   authStateCallback = null;
   authErrorCallback = null;
+  /* Default: server session check returns invalid (no cookie) */
+  mockFetch.mockResolvedValue({ ok: false, status: 401 });
 });
 
 /* ================================================================== */
@@ -88,7 +94,9 @@ describe("U-SHELL-001: Loading skeleton while auth resolves", () => {
 /* ================================================================== */
 
 describe("Auth guard — redirect unauthenticated users to /login", () => {
-  it("redirects to /login when auth resolves with null user", async () => {
+  it("redirects to /login when auth resolves with null user and no server session", async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 401 });
+
     render(
       <AuthenticatedLayout>
         <p>Protected content</p>
@@ -104,7 +112,9 @@ describe("Auth guard — redirect unauthenticated users to /login", () => {
     });
   });
 
-  it("does not render children when user is null", async () => {
+  it("does not render children when user is null and no server session", async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 401 });
+
     render(
       <AuthenticatedLayout>
         <p>Protected content</p>
@@ -120,7 +130,44 @@ describe("Auth guard — redirect unauthenticated users to /login", () => {
     });
   });
 
-  it("does not redirect when user is authenticated", async () => {
+  it("renders children when Firebase user is null but server session is valid", async () => {
+    mockFetch.mockResolvedValue({ ok: true, status: 200 });
+
+    render(
+      <AuthenticatedLayout>
+        <p>Protected content</p>
+      </AuthenticatedLayout>
+    );
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await waitFor(() => {
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(screen.getByText("Protected content")).toBeInTheDocument();
+    });
+  });
+
+  it("redirects to /login when server session check fails with network error", async () => {
+    mockFetch.mockRejectedValue(new Error("Network error"));
+
+    render(
+      <AuthenticatedLayout>
+        <p>Protected content</p>
+      </AuthenticatedLayout>
+    );
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith("/login");
+    });
+  });
+
+  it("does not redirect when user is authenticated via Firebase", async () => {
     render(
       <AuthenticatedLayout>
         <p>Protected content</p>
@@ -135,6 +182,8 @@ describe("Auth guard — redirect unauthenticated users to /login", () => {
       expect(mockPush).not.toHaveBeenCalled();
       expect(screen.getByText("Protected content")).toBeInTheDocument();
     });
+    /* Server session check should NOT be called when Firebase user exists */
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
 
@@ -214,7 +263,9 @@ describe("Navigation rendered on authenticated pages", () => {
 /* ================================================================== */
 
 describe("Auth error handling in layout", () => {
-  it("redirects to /login when auth state errors", async () => {
+  it("redirects to /login when auth state errors and no server session", async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 401 });
+
     render(
       <AuthenticatedLayout>
         <p>Content</p>
@@ -225,7 +276,7 @@ describe("Auth error handling in layout", () => {
       authErrorCallback?.(new Error("Auth service unavailable"));
     });
 
-    // Error sets user to null, loading to false → should redirect
+    // Error sets user to null, loading to false → server session check → redirect
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith("/login");
     });

@@ -6,15 +6,40 @@
  * Provides AuthProvider context, navigation, loading skeleton,
  * and auth guard (redirect to /login if unauthenticated).
  *
+ * Auth strategy (two-layer):
+ *   Layer 1: Next.js middleware checks __session cookie (server-side, fast).
+ *   Layer 2: AuthGuard checks Firebase SDK state OR server session validity.
+ *
+ * When Firebase SDK has no user (e.g. fresh browser context with only a
+ * cookie), the AuthGuard falls back to GET /auth/session to validate the
+ * cookie server-side. This supports E2E tests and cookie-only sessions.
+ *
  * U-SHELL-001: Loading skeleton while auth resolves (no flash of content).
  * U-SHELL-002: Skip-to-content link for accessibility.
  * T-SHELL-004: Navigation rendered on authenticated pages.
  */
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { Navigation } from "@/components/Navigation";
+
+/* ------------------------------------------------------------------ */
+/* Server session check — validates __session cookie via backend       */
+/* ------------------------------------------------------------------ */
+
+const API_BASE = process.env["NEXT_PUBLIC_API_BASE_URL"] ?? "http://localhost:3001";
+
+async function checkServerSession(): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE}/auth/session`, {
+      credentials: "include",
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Auth guard — redirects unauthenticated users                        */
@@ -23,15 +48,22 @@ import { Navigation } from "@/components/Navigation";
 function AuthGuard({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const [sessionValid, setSessionValid] = useState<boolean | null>(null);
 
+  /* When Firebase SDK has no user, check server session as fallback */
   useEffect(() => {
     if (!loading && user === null) {
-      router.push("/login");
+      checkServerSession().then((valid) => {
+        setSessionValid(valid);
+        if (!valid) {
+          router.push("/login");
+        }
+      });
     }
   }, [user, loading, router]);
 
   /* U-SHELL-001: Loading skeleton while auth state resolves */
-  if (loading) {
+  if (loading || (user === null && sessionValid === null)) {
     return (
       <div
         data-testid="auth-loading-skeleton"
@@ -53,8 +85,8 @@ function AuthGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  /* Don't render children until user is confirmed */
-  if (user === null) {
+  /* Don't render children until user is confirmed (Firebase or server session) */
+  if (user === null && sessionValid !== true) {
     return null;
   }
 
