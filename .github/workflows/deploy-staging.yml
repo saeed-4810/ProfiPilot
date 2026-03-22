@@ -49,7 +49,7 @@ jobs:
               ref: context.sha,
             });
             const buildCheck = checks.data.check_runs.find(
-              (r) => r.name === 'build' && r.conclusion === 'success'
+              (r) => r.name.toLowerCase() === 'build' && r.conclusion === 'success'
             );
             if (!buildCheck) {
               core.setFailed('CI build has not passed on this commit. Push to main and wait for CI first.');
