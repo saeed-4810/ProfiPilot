@@ -19,6 +19,7 @@ let authErrorCallback: ((error: Error) => void) | null = null;
 const mockUnsubscribe = vi.fn();
 
 const mockSignInWithEmailAndPassword = vi.fn();
+const mockSignInWithPopup = vi.fn();
 const mockCreateUserWithEmailAndPassword = vi.fn();
 const mockSendEmailVerification = vi.fn();
 const mockFirebaseSignOut = vi.fn();
@@ -35,6 +36,8 @@ vi.mock("firebase/auth", () => ({
     return mockUnsubscribe;
   },
   signInWithEmailAndPassword: (...args: unknown[]) => mockSignInWithEmailAndPassword(...args),
+  signInWithPopup: (...args: unknown[]) => mockSignInWithPopup(...args),
+  GoogleAuthProvider: vi.fn(),
   createUserWithEmailAndPassword: (...args: unknown[]) =>
     mockCreateUserWithEmailAndPassword(...args),
   sendEmailVerification: (...args: unknown[]) => mockSendEmailVerification(...args),
@@ -61,8 +64,17 @@ import { AuthProvider, useAuth, getAuthErrorMessage } from "../../lib/auth";
 /* ------------------------------------------------------------------ */
 
 function AuthConsumer() {
-  const { user, loading, error, signIn, signUp, sendVerificationEmail, signOut, getIdToken } =
-    useAuth();
+  const {
+    user,
+    loading,
+    error,
+    signIn,
+    signInWithGoogle,
+    signUp,
+    sendVerificationEmail,
+    signOut,
+    getIdToken,
+  } = useAuth();
   return createElement("div", null, [
     createElement("span", { key: "loading", "data-testid": "auth-loading" }, String(loading)),
     createElement(
@@ -85,6 +97,17 @@ function AuthConsumer() {
         },
       },
       "Sign In"
+    ),
+    createElement(
+      "button",
+      {
+        key: "google-sign-in",
+        "data-testid": "auth-google-sign-in-btn",
+        onClick: () => {
+          signInWithGoogle().catch(() => {});
+        },
+      },
+      "Google Sign In"
     ),
     createElement(
       "button",
@@ -417,6 +440,142 @@ describe("signIn: Firebase auth → POST /auth/verify-token", () => {
 });
 
 /* ================================================================== */
+/* T-PERF-139-001: signInWithGoogle uses signInWithPopup               */
+/* ================================================================== */
+
+describe("T-PERF-139-001: signInWithGoogle uses signInWithPopup(GoogleAuthProvider)", () => {
+  it("calls signInWithPopup and POST /auth/verify-token", async () => {
+    mockSignInWithPopup.mockResolvedValue({
+      user: { getIdToken: () => Promise.resolve("google-id-token"), email: "google@example.com" },
+    });
+    mockFetch.mockResolvedValue({ ok: true });
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await user.click(screen.getByTestId("auth-google-sign-in-btn"));
+
+    await waitFor(() => {
+      expect(mockSignInWithPopup).toHaveBeenCalledWith(expect.anything(), expect.anything());
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining("/auth/verify-token"),
+        expect.objectContaining({
+          method: "POST",
+          credentials: "include",
+          body: JSON.stringify({ idToken: "google-id-token" }),
+        })
+      );
+    });
+  });
+
+  it("silently ignores popup-closed-by-user error", async () => {
+    mockSignInWithPopup.mockRejectedValue(
+      Object.assign(new Error("Popup closed"), { code: "auth/popup-closed-by-user" })
+    );
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await user.click(screen.getByTestId("auth-google-sign-in-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-loading")).toHaveTextContent("false");
+      expect(screen.getByTestId("auth-error")).toHaveTextContent("null");
+    });
+  });
+
+  it("silently ignores cancelled-popup-request error", async () => {
+    mockSignInWithPopup.mockRejectedValue(
+      Object.assign(new Error("Cancelled"), { code: "auth/cancelled-popup-request" })
+    );
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await user.click(screen.getByTestId("auth-google-sign-in-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-loading")).toHaveTextContent("false");
+      expect(screen.getByTestId("auth-error")).toHaveTextContent("null");
+    });
+  });
+
+  it("sets error state for popup-blocked error", async () => {
+    mockSignInWithPopup.mockRejectedValue(
+      Object.assign(new Error("Popup blocked"), { code: "auth/popup-blocked" })
+    );
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await user.click(screen.getByTestId("auth-google-sign-in-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-error")).not.toHaveTextContent("null");
+    });
+  });
+
+  it("sets error state when verify-token fails after Google sign-in", async () => {
+    mockSignInWithPopup.mockResolvedValue({
+      user: { getIdToken: () => Promise.resolve("google-id-token"), email: "google@example.com" },
+    });
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: () => Promise.resolve({ code: "INTERNAL_ERROR" }),
+    });
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await user.click(screen.getByTestId("auth-google-sign-in-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-error")).toHaveTextContent(
+        "Failed to verify session with server."
+      );
+    });
+  });
+
+  it("handles non-Error thrown during Google sign-in", async () => {
+    mockSignInWithPopup.mockRejectedValue("string error");
+
+    const user = userEvent.setup();
+    renderWithProvider();
+
+    act(() => {
+      authStateCallback?.(null);
+    });
+
+    await user.click(screen.getByTestId("auth-google-sign-in-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-error")).toHaveTextContent("Google sign-in failed.");
+    });
+  });
+});
+
+/* ================================================================== */
 /* T-PERF-138-003: sendVerificationEmail resends to current user       */
 /* ================================================================== */
 
@@ -732,6 +891,22 @@ describe("getAuthErrorMessage", () => {
   it("returns mapped message for auth/email-not-verified", () => {
     const err = Object.assign(new Error("Server error"), { code: "auth/email-not-verified" });
     expect(getAuthErrorMessage(err)).toBe("Please verify your email address before signing in.");
+  });
+
+  it("returns mapped message for auth/popup-blocked", () => {
+    const err = Object.assign(new Error("Popup blocked"), { code: "auth/popup-blocked" });
+    expect(getAuthErrorMessage(err)).toBe(
+      "Popup was blocked by your browser. Please allow popups and try again."
+    );
+  });
+
+  it("returns mapped message for auth/account-exists-with-different-credential", () => {
+    const err = Object.assign(new Error("Account exists"), {
+      code: "auth/account-exists-with-different-credential",
+    });
+    expect(getAuthErrorMessage(err)).toBe(
+      "An account already exists with this email using a different sign-in method."
+    );
   });
 
   it("returns error.message for non-Firebase errors with message", () => {

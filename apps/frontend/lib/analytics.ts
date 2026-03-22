@@ -33,6 +33,9 @@ export type TelemetryEvent =
   | "page_view"
   | "login_attempt"
   | "signup_attempt"
+  | "google_signin_attempt"
+  | "google_signin_success"
+  | "google_signin_error"
   | "email_verification_sent"
   | "email_verification_blocked"
   | "audit_trigger"
@@ -54,6 +57,22 @@ export interface LoginAttemptPayload {
 /** Payload for signup_attempt event. */
 export interface SignupAttemptPayload {
   readonly method: string;
+  readonly timestamp: number;
+}
+
+/** Payload for google_signin_attempt event. */
+export interface GoogleSigninAttemptPayload {
+  readonly timestamp: number;
+}
+
+/** Payload for google_signin_success event. */
+export interface GoogleSigninSuccessPayload {
+  readonly timestamp: number;
+}
+
+/** Payload for google_signin_error event. */
+export interface GoogleSigninErrorPayload {
+  readonly error_code: string;
   readonly timestamp: number;
 }
 
@@ -170,6 +189,21 @@ export function trackLoginAttempt(payload: LoginAttemptPayload): void {
 /** T-PERF-137-001: signup_attempt — fires on signup button click. */
 export function trackSignupAttempt(payload: SignupAttemptPayload): void {
   track("signup_attempt", { ...payload });
+}
+
+/** T-PERF-139-001: google_signin_attempt — fires on "Continue with Google" click. */
+export function trackGoogleSigninAttempt(payload: GoogleSigninAttemptPayload): void {
+  track("google_signin_attempt", { ...payload });
+}
+
+/** T-PERF-139-001: google_signin_success — fires on successful Google auth. */
+export function trackGoogleSigninSuccess(payload: GoogleSigninSuccessPayload): void {
+  track("google_signin_success", { ...payload });
+}
+
+/** T-PERF-139-002: google_signin_error — fires on Google auth error. */
+export function trackGoogleSigninError(payload: GoogleSigninErrorPayload): void {
+  track("google_signin_error", { ...payload });
 }
 
 /** T-PERF-138-002: email_verification_sent — fires after signup and on resend. */

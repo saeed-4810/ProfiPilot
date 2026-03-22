@@ -15,9 +15,12 @@ const mockSignUp = vi.fn();
 let mockUser: { email: string; uid: string } | null = null;
 let mockAuthLoading = false;
 
+const mockSignInWithGoogle = vi.fn();
+
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({
     signIn: vi.fn(),
+    signInWithGoogle: mockSignInWithGoogle,
     signUp: mockSignUp,
     signOut: vi.fn(),
     getIdToken: vi.fn(),
@@ -49,6 +52,9 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@/lib/analytics", () => ({
   trackPageView: vi.fn(),
   trackSignupAttempt: vi.fn(),
+  trackGoogleSigninAttempt: vi.fn(),
+  trackGoogleSigninSuccess: vi.fn(),
+  trackGoogleSigninError: vi.fn(),
 }));
 
 /* Import after mocks */
@@ -600,6 +606,71 @@ describe("Signup form structure and accessibility", () => {
     expect(button).toBeInTheDocument();
     expect(button).toHaveTextContent("Create account");
     expect(button).not.toBeDisabled();
+  });
+
+  it("renders Google Sign-In button", () => {
+    render(<SignupPage />);
+
+    const btn = screen.getByTestId("google-signin-btn");
+    expect(btn).toBeInTheDocument();
+    expect(btn).toHaveTextContent("Continue with Google");
+  });
+
+  it("calls signInWithGoogle and redirects to /dashboard on success", async () => {
+    mockSignInWithGoogle.mockResolvedValue(undefined);
+
+    const user = userEvent.setup();
+    render(<SignupPage />);
+
+    await user.click(screen.getByTestId("google-signin-btn"));
+
+    await waitFor(() => {
+      expect(mockSignInWithGoogle).toHaveBeenCalled();
+      expect(mockPush).toHaveBeenCalledWith("/dashboard");
+    });
+  });
+
+  it("shows error when Google sign-in fails with popup-blocked", async () => {
+    mockSignInWithGoogle.mockRejectedValue(
+      Object.assign(new Error("Popup blocked"), { code: "auth/popup-blocked" })
+    );
+
+    const user = userEvent.setup();
+    render(<SignupPage />);
+
+    await user.click(screen.getByTestId("google-signin-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("signup-error")).toBeInTheDocument();
+    });
+  });
+
+  it("shows error for Google sign-in failure without error code on signup", async () => {
+    mockSignInWithGoogle.mockRejectedValue(new Error("Network error"));
+
+    const user = userEvent.setup();
+    render(<SignupPage />);
+
+    await user.click(screen.getByTestId("google-signin-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("signup-error")).toBeInTheDocument();
+    });
+  });
+
+  it("silently handles popup-closed-by-user on signup", async () => {
+    mockSignInWithGoogle.mockRejectedValue(
+      Object.assign(new Error("Closed"), { code: "auth/popup-closed-by-user" })
+    );
+
+    const user = userEvent.setup();
+    render(<SignupPage />);
+
+    await user.click(screen.getByTestId("google-signin-btn"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("signup-error")).not.toBeInTheDocument();
+    });
   });
 
   it("does not redirect when auth is still loading", () => {

@@ -2,19 +2,20 @@
 
 /**
  * Auth Context Provider — tracks Firebase Auth state and provides
- * signIn / signUp / signOut / sendVerificationEmail / getIdToken methods.
+ * signIn / signInWithGoogle / signUp / signOut / sendVerificationEmail / getIdToken methods.
  *
  * Per ADR-010 + ADR-028 session lifecycle:
  *   1. signUp: Firebase createUserWithEmailAndPassword → sendEmailVerification → redirect /verify-email
- *      (does NOT call POST /auth/verify-token — email must be verified first)
  *   2. signIn: Firebase signInWithEmailAndPassword → POST /auth/verify-token
- *      (server checks email_verified === true; returns 403 AUTH_EMAIL_NOT_VERIFIED if false)
- *   3. signOut: POST /auth/logout (clears cookie) → Firebase signOut
- *   4. onAuthStateChanged: keeps user/loading/error in sync
+ *   3. signInWithGoogle: Firebase signInWithPopup(GoogleAuthProvider) → POST /auth/verify-token
+ *      (Google users have email_verified: true — bypass verification gate)
+ *   4. signOut: POST /auth/logout (clears cookie) → Firebase signOut
+ *   5. onAuthStateChanged: keeps user/loading/error in sync
  *
  * T-SHELL-002: AuthProvider tracks auth state changes via onAuthStateChanged.
  * T-SHELL-005: Sign-out clears session and redirects.
  * T-PERF-138-002: signUp calls sendEmailVerification after account creation.
+ * T-PERF-139-001: signInWithGoogle uses signInWithPopup(GoogleAuthProvider).
  */
 
 import {
@@ -29,6 +30,8 @@ import {
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   createUserWithEmailAndPassword,
   sendEmailVerification,
   signOut as firebaseSignOut,
@@ -52,6 +55,8 @@ export interface AuthState {
 export interface AuthContextValue extends AuthState {
   /** Sign in with email + password. Sets server-side session cookie. */
   signIn: (email: string, password: string) => Promise<void>;
+  /** Sign in with Google OAuth popup. Sets server-side session cookie. */
+  signInWithGoogle: () => Promise<void>;
   /** Sign up with email + password. Sends verification email (no session cookie). */
   signUp: (email: string, password: string) => Promise<void>;
   /** Resend verification email to the current Firebase user. */
@@ -159,6 +164,44 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, []);
 
+  /* --- signInWithGoogle: Google OAuth popup → server session cookie (ADR-028) --- */
+  const signInWithGoogle = useCallback(async (): Promise<void> => {
+    setState((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const auth = getFirebaseAuth();
+      const provider = new GoogleAuthProvider();
+      const credential = await signInWithPopup(auth, provider);
+      const idToken = await credential.user.getIdToken();
+
+      // POST /auth/verify-token — Google users have email_verified: true (ADR-028)
+      const response = await fetch(`${API_BASE}/auth/verify-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ idToken }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to verify session with server.");
+      }
+
+      // onAuthStateChanged will update state with the user
+    } catch (err: unknown) {
+      // T-PERF-139-002: Silently ignore user-initiated popup closures
+      const firebaseErr = err as Error & { code?: string };
+      if (
+        firebaseErr.code === "auth/popup-closed-by-user" ||
+        firebaseErr.code === "auth/cancelled-popup-request"
+      ) {
+        setState((prev) => ({ ...prev, loading: false }));
+        return;
+      }
+      const message = err instanceof Error ? err.message : "Google sign-in failed.";
+      setState((prev) => ({ ...prev, loading: false, error: message }));
+      throw err;
+    }
+  }, []);
+
   /* --- signUp: Firebase create account → send verification email (ADR-028) --- */
   const signUp = useCallback(async (email: string, password: string): Promise<void> => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -224,6 +267,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       loading: state.loading,
       error: state.error,
       signIn,
+      signInWithGoogle,
       signUp,
       sendVerificationEmail,
       signOut,
@@ -234,6 +278,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       state.loading,
       state.error,
       signIn,
+      signInWithGoogle,
       signUp,
       sendVerificationEmail,
       signOut,
@@ -259,6 +304,9 @@ const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   "auth/email-already-in-use": "An account with this email already exists.",
   "auth/weak-password": "Password must be at least 6 characters.",
   "auth/email-not-verified": "Please verify your email address before signing in.",
+  "auth/popup-blocked": "Popup was blocked by your browser. Please allow popups and try again.",
+  "auth/account-exists-with-different-credential":
+    "An account already exists with this email using a different sign-in method.",
 };
 
 const DEFAULT_AUTH_ERROR = "An unexpected error occurred. Please try again.";

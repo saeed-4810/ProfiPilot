@@ -9,6 +9,9 @@ import {
   trackPageView,
   trackLoginAttempt,
   trackSignupAttempt,
+  trackGoogleSigninAttempt,
+  trackGoogleSigninSuccess,
+  trackGoogleSigninError,
   trackEmailVerificationSent,
   trackEmailVerificationBlocked,
   trackAuditTrigger,
@@ -186,6 +189,36 @@ describe("T-PERF-122-007: Typed event helpers match ADR-002 telemetry contract",
     expect(mock.capture).toHaveBeenCalledWith("signup_attempt", {
       method: "email",
       timestamp: 3000,
+    });
+  });
+
+  it("trackGoogleSigninAttempt sends google_signin_attempt with timestamp", () => {
+    const mock = createMockProvider();
+    setAnalyticsProvider(mock);
+
+    trackGoogleSigninAttempt({ timestamp: 6000 });
+
+    expect(mock.capture).toHaveBeenCalledWith("google_signin_attempt", { timestamp: 6000 });
+  });
+
+  it("trackGoogleSigninSuccess sends google_signin_success with timestamp", () => {
+    const mock = createMockProvider();
+    setAnalyticsProvider(mock);
+
+    trackGoogleSigninSuccess({ timestamp: 7000 });
+
+    expect(mock.capture).toHaveBeenCalledWith("google_signin_success", { timestamp: 7000 });
+  });
+
+  it("trackGoogleSigninError sends google_signin_error with error_code and timestamp", () => {
+    const mock = createMockProvider();
+    setAnalyticsProvider(mock);
+
+    trackGoogleSigninError({ error_code: "auth/popup-blocked", timestamp: 8000 });
+
+    expect(mock.capture).toHaveBeenCalledWith("google_signin_error", {
+      error_code: "auth/popup-blocked",
+      timestamp: 8000,
     });
   });
 
@@ -394,6 +427,9 @@ describe("U-PERF-122-001: Graceful degradation without provider", () => {
     expect(() => trackPageView({ route: "/", timestamp: 0 })).not.toThrow();
     expect(() => trackLoginAttempt({ method: "email", timestamp: 0 })).not.toThrow();
     expect(() => trackSignupAttempt({ method: "email", timestamp: 0 })).not.toThrow();
+    expect(() => trackGoogleSigninAttempt({ timestamp: 0 })).not.toThrow();
+    expect(() => trackGoogleSigninSuccess({ timestamp: 0 })).not.toThrow();
+    expect(() => trackGoogleSigninError({ error_code: "test", timestamp: 0 })).not.toThrow();
     expect(() => trackEmailVerificationSent({ method: "auto", timestamp: 0 })).not.toThrow();
     expect(() => trackEmailVerificationBlocked({ timestamp: 0 })).not.toThrow();
     expect(() => trackAuditTrigger({ url: "https://x.com", timestamp: 0 })).not.toThrow();
