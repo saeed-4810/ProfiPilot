@@ -31,6 +31,8 @@ ARG NEXT_PUBLIC_FIREBASE_PROJECT_ID
 ARG NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
 ARG NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
 ARG NEXT_PUBLIC_FIREBASE_APP_ID
+# Runtime validation dashboard access password (staging only — page blocked in production by middleware)
+ARG NEXT_PUBLIC_RUNTIME_VALIDATION_KEY
 
 # Next.js collects anonymous telemetry — disable in CI/production
 ENV NEXT_TELEMETRY_DISABLED=1

@@ -48,3 +48,7 @@ firebase-debug.log
 playwright-report/
 test-results/
 playwright/.cache/
+e2e/.auth/
+
+# Session files
+.tmp/

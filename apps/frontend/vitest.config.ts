@@ -17,6 +17,7 @@ export default defineConfig({
         "app/page.tsx", // Root redirect — no testable logic
         "app/globals.css", // CSS file
         "app/(auth)/layout.tsx", // Auth route group layout — trivial AuthProvider wrapper, no logic
+        "app/runtime-validation/**", // Staging-only diagnostic dashboard — tested by running it, not unit tests. Blocked in production by middleware.
         // app/(authenticated)/audit/** — PERF-100 implemented, tested in tests/pages/audit.test.tsx
         // app/(authenticated)/dashboard/** — PERF-125 implemented, tested in tests/pages/dashboard.test.tsx
         // app/(authenticated)/results/** — PERF-102 implemented, tested in tests/pages/results.test.tsx

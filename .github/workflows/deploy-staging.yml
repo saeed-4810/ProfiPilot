@@ -168,6 +168,7 @@ jobs:
             --build-arg NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="${{ secrets.FIREBASE_STORAGE_BUCKET_STAGE }}" \
             --build-arg NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="${{ secrets.FIREBASE_MESSAGING_SENDER_ID_STAGE }}" \
             --build-arg NEXT_PUBLIC_FIREBASE_APP_ID="${{ secrets.FIREBASE_APP_ID_STAGE }}" \
+            --build-arg NEXT_PUBLIC_RUNTIME_VALIDATION_KEY="${{ secrets.RUNTIME_VALIDATION_KEY_STAGE }}" \
             -t "$IMAGE:${{ github.sha }}" \
             -t "$IMAGE:latest" \
             .

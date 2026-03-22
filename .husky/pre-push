@@ -1,1 +1,2 @@
 pnpm typecheck
+pnpm --filter @prefpilot/frontend e2e
