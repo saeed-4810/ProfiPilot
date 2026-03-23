@@ -1,0 +1,29 @@
+{
+  "name": "@prefpilot/functions",
+  "version": "0.0.1",
+  "description": "Cloud Functions for PrefPilot (Firebase Functions v2)",
+  "private": true,
+  "main": "lib/index.js",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "lint": "eslint src tests --max-warnings=0",
+    "typecheck": "tsc --noEmit --project tsconfig.build.json",
+    "deploy": "firebase deploy --only functions",
+    "clean": "rm -rf lib"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.1.0",
+    "firebase-functions": "^6.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@vitest/coverage-v8": "^1.6.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}
