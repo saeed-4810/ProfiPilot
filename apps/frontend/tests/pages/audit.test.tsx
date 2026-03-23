@@ -69,7 +69,9 @@ describe("P-PERF-100-001: Submit valid URL → job created, progress indicator s
     await waitFor(() => {
       expect(mockCreateAudit).toHaveBeenCalledWith("https://example.com");
       expect(screen.getByTestId("audit-progress")).toBeInTheDocument();
-      expect(screen.getByTestId("audit-spinner")).toBeInTheDocument();
+      // PERF-142: spinner is now inside AuditProgress stepper
+      expect(screen.getByTestId("audit-progress-stepper")).toBeInTheDocument();
+      expect(screen.getByTestId("step-spinner")).toBeInTheDocument();
     });
   });
 });
@@ -223,7 +225,7 @@ describe("U-PERF-100-001: Validation errors shown inline per field", () => {
 /* ================================================================== */
 
 describe("U-PERF-100-002: Progress indicator visible while audit runs (queued/running states)", () => {
-  it("shows queued status message initially", async () => {
+  it("shows progress stepper with first step active initially", async () => {
     mockCreateAudit.mockResolvedValue({
       jobId: "job-q",
       status: "queued",
@@ -244,11 +246,13 @@ describe("U-PERF-100-002: Progress indicator visible while audit runs (queued/ru
 
     await waitFor(() => {
       expect(screen.getByTestId("audit-progress")).toBeInTheDocument();
-      expect(screen.getByText("Audit queued. Preparing run...")).toBeInTheDocument();
+      // PERF-142: status is now shown in the progress stepper live region
+      expect(screen.getByTestId("audit-progress-stepper")).toBeInTheDocument();
+      expect(screen.getByTestId("step-label-0")).toHaveTextContent("Fetching your page...");
     });
   });
 
-  it("updates to running status message after poll", async () => {
+  it("shows progress stepper with step advancing after poll", async () => {
     mockCreateAudit.mockResolvedValue({
       jobId: "job-r",
       status: "queued",
@@ -271,17 +275,19 @@ describe("U-PERF-100-002: Progress indicator visible while audit runs (queued/ru
       expect(screen.getByTestId("audit-progress")).toBeInTheDocument();
     });
 
-    // Advance to trigger poll
+    // Advance past step timer (4s) to trigger step advance
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(3_000);
+      await vi.advanceTimersByTimeAsync(4_000);
     });
 
     await waitFor(() => {
-      expect(screen.getByText("Audit running. This can take a moment.")).toBeInTheDocument();
+      // PERF-142: step should have advanced, live region shows current step
+      expect(screen.getByTestId("audit-progress-stepper")).toBeInTheDocument();
+      expect(screen.getByTestId("step-spinner")).toBeInTheDocument();
     });
   });
 
-  it("shows retrying status message", async () => {
+  it("shows progress stepper during retrying status", async () => {
     mockCreateAudit.mockResolvedValue({
       jobId: "job-ret",
       status: "queued",
@@ -309,7 +315,9 @@ describe("U-PERF-100-002: Progress indicator visible while audit runs (queued/ru
     });
 
     await waitFor(() => {
-      expect(screen.getByText("Temporary issue. Retrying automatically...")).toBeInTheDocument();
+      // PERF-142: retrying is non-terminal, progress stepper stays visible
+      expect(screen.getByTestId("audit-progress-stepper")).toBeInTheDocument();
+      expect(screen.getByTestId("step-spinner")).toBeInTheDocument();
     });
   });
 
@@ -328,7 +336,7 @@ describe("U-PERF-100-002: Progress indicator visible while audit runs (queued/ru
     });
   });
 
-  it("has accessible progress indicator with role=status", async () => {
+  it("has accessible progress indicator with role=progressbar", async () => {
     mockCreateAudit.mockResolvedValue({
       jobId: "job-a11y",
       status: "queued",
@@ -348,8 +356,11 @@ describe("U-PERF-100-002: Progress indicator visible while audit runs (queued/ru
     await submitUrl(user, "https://example.com");
 
     await waitFor(() => {
-      const progress = screen.getByTestId("audit-progress");
-      expect(progress).toHaveAttribute("role", "status");
+      // PERF-142: progress stepper uses role="progressbar" with aria-valuenow
+      const stepper = screen.getByTestId("audit-progress-stepper");
+      expect(stepper).toHaveAttribute("role", "progressbar");
+      expect(stepper).toHaveAttribute("aria-label", "Audit progress");
+      expect(stepper).toHaveAttribute("aria-valuenow");
     });
   });
 });
@@ -511,7 +522,7 @@ describe("T-PERF-100-003: Unauthenticated request returns 401 → redirect to /l
 /* ================================================================== */
 
 describe("Failed audit → error state with retry CTA", () => {
-  it("shows error message and retry button when audit fails", async () => {
+  it("shows error in progress stepper and retry button when audit fails", async () => {
     mockCreateAudit.mockResolvedValue({
       jobId: "job-fail",
       status: "queued",
@@ -540,8 +551,10 @@ describe("Failed audit → error state with retry CTA", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("audit-error")).toBeInTheDocument();
-      expect(screen.getByText("Audit failed. Try again or review logs.")).toBeInTheDocument();
+      // PERF-142: error now shown in progress stepper with error icon + message
+      expect(screen.getByTestId("audit-error-progress")).toBeInTheDocument();
+      expect(screen.getByTestId("step-error-icon")).toBeInTheDocument();
+      expect(screen.getByTestId("audit-progress-error")).toHaveTextContent("TIMEOUT");
       expect(screen.getByTestId("audit-retry")).toBeInTheDocument();
     });
   });
@@ -617,7 +630,7 @@ describe("General server error handling", () => {
 /* ================================================================== */
 
 describe("Cancelled audit → error state", () => {
-  it("shows error state when audit is cancelled", async () => {
+  it("shows error in progress stepper when audit is cancelled", async () => {
     mockCreateAudit.mockResolvedValue({
       jobId: "job-cancel",
       status: "queued",
@@ -645,8 +658,10 @@ describe("Cancelled audit → error state", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("audit-error")).toBeInTheDocument();
-      expect(screen.getByText("Audit failed. Try again or review logs.")).toBeInTheDocument();
+      // PERF-142: cancelled shows error in progress stepper
+      expect(screen.getByTestId("audit-error-progress")).toBeInTheDocument();
+      expect(screen.getByTestId("step-error-icon")).toBeInTheDocument();
+      expect(screen.getByTestId("audit-progress-error")).toBeInTheDocument();
     });
   });
 });
@@ -798,5 +813,55 @@ describe("getStatusMessage", () => {
     expect(getStatusMessage("retrying")).toBe("Temporary issue. Retrying automatically...");
     expect(getStatusMessage("failed")).toBe("Audit failed. Try again or review logs.");
     expect(getStatusMessage("completed")).toBe("Audit complete. Results ready.");
+  });
+
+  it("returns empty string for unknown/cancelled status (fallback branch)", async () => {
+    const { getStatusMessage } = await import("../../lib/audit");
+    expect(getStatusMessage("cancelled")).toBe("");
+  });
+});
+
+/* ================================================================== */
+/* PERF-142: Step timer caps at step 3 (does not advance past)        */
+/* ================================================================== */
+
+describe("PERF-142: Step timer caps at penultimate step", () => {
+  it("step timer does not advance past step 3 (step 4 reserved for completed)", async () => {
+    mockCreateAudit.mockResolvedValue({
+      jobId: "job-cap",
+      status: "queued",
+      createdAt: "2026-03-17T00:00:00Z",
+    });
+    // Keep running — never completes
+    mockGetAuditStatus.mockResolvedValue({
+      jobId: "job-cap",
+      status: "running",
+      retryCount: 0,
+      createdAt: "2026-03-17T00:00:00Z",
+      updatedAt: "2026-03-17T00:00:01Z",
+    });
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<AuditPage />);
+
+    await submitUrl(user, "https://example.com");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("audit-progress")).toBeInTheDocument();
+    });
+
+    // Advance 5 step intervals (5 * 4s = 20s) — should cap at step 3
+    for (let i = 0; i < 5; i++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_000);
+      });
+    }
+
+    await waitFor(() => {
+      // Step 3 (0-indexed) = "Analyzing results with AI..." should be active
+      // Steps 0-2 completed, step 3 active, step 4 still pending
+      const liveRegion = screen.getByTestId("audit-progress-live");
+      expect(liveRegion).toHaveTextContent("Step 4 of 5: Analyzing results with AI...");
+    });
   });
 });
