@@ -71,5 +71,20 @@ service cloud.firestore {
                   && resource.data.uid == request.auth.uid;
       allow write: if false;
     }
+
+    // ─── Feedback Collection (PERF-141) ─────────────────────────────────
+    // Create-only for authenticated user matching userId. No client reads.
+    // All reads are via Admin SDK (backend/Cloud Functions only).
+    match /feedback/{docId} {
+      allow create: if isAuthenticated()
+                    && request.resource.data.userId == request.auth.uid;
+      allow read: if false;
+    }
+
+    // ─── Feedback Preferences Collection (PERF-141) ─────────────────────
+    // Read/write for authenticated user matching own userId (doc ID = userId).
+    match /feedback_preferences/{userId} {
+      allow read, write: if isOwner(userId);
+    }
   }
 }

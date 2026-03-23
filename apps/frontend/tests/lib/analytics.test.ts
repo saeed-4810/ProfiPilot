@@ -17,6 +17,12 @@ import {
   trackAuditTrigger,
   trackResultsView,
   trackExportClick,
+  trackFeedbackSurveyShown,
+  trackFeedbackSurveySubmitted,
+  trackFeedbackSurveyDismissed,
+  trackNpsPromptShown,
+  trackNpsScoreSubmitted,
+  trackFrictionReportSubmitted,
   createPostHogProvider,
 } from "../../lib/analytics";
 
@@ -283,6 +289,130 @@ describe("T-PERF-122-007: Typed event helpers match ADR-002 telemetry contract",
 });
 
 /* ------------------------------------------------------------------ */
+/* T-PERF-141: Typed wrappers for 6 feedback events                    */
+/* ------------------------------------------------------------------ */
+
+describe("T-PERF-141: Feedback event typed helpers", () => {
+  it("trackFeedbackSurveyShown sends feedback_survey_shown with trigger, page, timestamp", () => {
+    const mock = createMockProvider();
+    setAnalyticsProvider(mock);
+
+    trackFeedbackSurveyShown({ trigger: "first_audit", page: "/results", timestamp: 9000 });
+
+    expect(mock.capture).toHaveBeenCalledWith("feedback_survey_shown", {
+      trigger: "first_audit",
+      page: "/results",
+      timestamp: 9000,
+    });
+  });
+
+  it("trackFeedbackSurveySubmitted sends feedback_survey_submitted with all fields", () => {
+    const mock = createMockProvider();
+    setAnalyticsProvider(mock);
+
+    trackFeedbackSurveySubmitted({
+      trigger: "third_session",
+      q1_value_rating: 4,
+      q2_ease_rating: 5,
+      q5_nps_score: 8,
+      q7_wtp: "49",
+      q8_pmf: "very_disappointed",
+      has_open_text: true,
+      completion_time_ms: 45000,
+      page: "/results",
+      timestamp: 10000,
+    });
+
+    expect(mock.capture).toHaveBeenCalledWith("feedback_survey_submitted", {
+      trigger: "third_session",
+      q1_value_rating: 4,
+      q2_ease_rating: 5,
+      q5_nps_score: 8,
+      q7_wtp: "49",
+      q8_pmf: "very_disappointed",
+      has_open_text: true,
+      completion_time_ms: 45000,
+      page: "/results",
+      timestamp: 10000,
+    });
+  });
+
+  it("trackFeedbackSurveyDismissed sends feedback_survey_dismissed with dismiss_type", () => {
+    const mock = createMockProvider();
+    setAnalyticsProvider(mock);
+
+    trackFeedbackSurveyDismissed({
+      trigger: "first_export",
+      dismiss_type: "remind_later",
+      page: "/export",
+      timestamp: 11000,
+    });
+
+    expect(mock.capture).toHaveBeenCalledWith("feedback_survey_dismissed", {
+      trigger: "first_export",
+      dismiss_type: "remind_later",
+      page: "/export",
+      timestamp: 11000,
+    });
+  });
+
+  it("trackNpsPromptShown sends nps_prompt_shown with audit_count", () => {
+    const mock = createMockProvider();
+    setAnalyticsProvider(mock);
+
+    trackNpsPromptShown({ audit_count: 5, page: "/results", timestamp: 12000 });
+
+    expect(mock.capture).toHaveBeenCalledWith("nps_prompt_shown", {
+      audit_count: 5,
+      page: "/results",
+      timestamp: 12000,
+    });
+  });
+
+  it("trackNpsScoreSubmitted sends nps_score_submitted with score and category", () => {
+    const mock = createMockProvider();
+    setAnalyticsProvider(mock);
+
+    trackNpsScoreSubmitted({
+      score: 9,
+      category: "promoter",
+      has_followup: true,
+      page: "/results",
+      timestamp: 13000,
+    });
+
+    expect(mock.capture).toHaveBeenCalledWith("nps_score_submitted", {
+      score: 9,
+      category: "promoter",
+      has_followup: true,
+      page: "/results",
+      timestamp: 13000,
+    });
+  });
+
+  it("trackFrictionReportSubmitted sends friction_report_submitted with category", () => {
+    const mock = createMockProvider();
+    setAnalyticsProvider(mock);
+
+    trackFrictionReportSubmitted({
+      category: "bug",
+      has_screenshot: true,
+      page: "/audit",
+      session_duration_s: 300,
+      timestamp: 14000,
+    });
+
+    expect(mock.capture).toHaveBeenCalledWith("friction_report_submitted", {
+      category: "bug",
+      has_screenshot: true,
+      page: "/audit",
+      session_duration_s: 300,
+      timestamp: 14000,
+    });
+  });
+});
+
+/* ------------------------------------------------------------------ */
 /* T-PERF-122-008: PostHog API key from env var, not hardcoded         */
 /* ------------------------------------------------------------------ */
 
@@ -435,5 +565,54 @@ describe("U-PERF-122-001: Graceful degradation without provider", () => {
     expect(() => trackAuditTrigger({ url: "https://x.com", timestamp: 0 })).not.toThrow();
     expect(() => trackResultsView({ audit_id: "x", timestamp: 0 })).not.toThrow();
     expect(() => trackExportClick({ format: "pdf", audit_id: "x" })).not.toThrow();
+  });
+
+  it("PERF-141 feedback helpers do not throw when provider is not set", () => {
+    expect(() =>
+      trackFeedbackSurveyShown({ trigger: "first_audit", page: "/results", timestamp: 0 })
+    ).not.toThrow();
+    expect(() =>
+      trackFeedbackSurveySubmitted({
+        trigger: "first_audit",
+        q1_value_rating: 4,
+        q2_ease_rating: 5,
+        q5_nps_score: 8,
+        q7_wtp: "49",
+        q8_pmf: "very_disappointed",
+        has_open_text: true,
+        completion_time_ms: 30000,
+        page: "/results",
+        timestamp: 0,
+      })
+    ).not.toThrow();
+    expect(() =>
+      trackFeedbackSurveyDismissed({
+        trigger: "first_audit",
+        dismiss_type: "close",
+        page: "/results",
+        timestamp: 0,
+      })
+    ).not.toThrow();
+    expect(() =>
+      trackNpsPromptShown({ audit_count: 3, page: "/results", timestamp: 0 })
+    ).not.toThrow();
+    expect(() =>
+      trackNpsScoreSubmitted({
+        score: 8,
+        category: "passive",
+        has_followup: false,
+        page: "/results",
+        timestamp: 0,
+      })
+    ).not.toThrow();
+    expect(() =>
+      trackFrictionReportSubmitted({
+        category: "bug",
+        has_screenshot: false,
+        page: "/audit",
+        session_duration_s: 120,
+        timestamp: 0,
+      })
+    ).not.toThrow();
   });
 });

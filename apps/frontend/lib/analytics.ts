@@ -28,7 +28,7 @@ export interface AnalyticsProvider {
   readonly capture: (eventName: string, properties?: Record<string, unknown>) => void;
 }
 
-/** ADR-002 telemetry event names (exhaustive). */
+/** ADR-002 telemetry event names + PERF-141 feedback events (exhaustive). */
 export type TelemetryEvent =
   | "page_view"
   | "login_attempt"
@@ -40,7 +40,13 @@ export type TelemetryEvent =
   | "email_verification_blocked"
   | "audit_trigger"
   | "results_view"
-  | "export_click";
+  | "export_click"
+  | "feedback_survey_shown"
+  | "feedback_survey_submitted"
+  | "feedback_survey_dismissed"
+  | "nps_prompt_shown"
+  | "nps_score_submitted"
+  | "friction_report_submitted";
 
 /** Payload for page_view event. */
 export interface PageViewPayload {
@@ -103,6 +109,65 @@ export interface ResultsViewPayload {
 export interface ExportClickPayload {
   readonly format: string;
   readonly audit_id: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* PERF-141: Feedback event payloads                                   */
+/* No open-text content in PostHog payloads (PII separation per D3).  */
+/* ------------------------------------------------------------------ */
+
+/** Payload for feedback_survey_shown event. */
+export interface FeedbackSurveyShownPayload {
+  readonly trigger: string;
+  readonly page: string;
+  readonly timestamp: number;
+}
+
+/** Payload for feedback_survey_submitted event. */
+export interface FeedbackSurveySubmittedPayload {
+  readonly trigger: string;
+  readonly q1_value_rating: number;
+  readonly q2_ease_rating: number;
+  readonly q5_nps_score: number;
+  readonly q7_wtp: string;
+  readonly q8_pmf: string;
+  readonly has_open_text: boolean;
+  readonly completion_time_ms: number;
+  readonly page: string;
+  readonly timestamp: number;
+}
+
+/** Payload for feedback_survey_dismissed event. */
+export interface FeedbackSurveyDismissedPayload {
+  readonly trigger: string;
+  readonly dismiss_type: string;
+  readonly page: string;
+  readonly timestamp: number;
+}
+
+/** Payload for nps_prompt_shown event. */
+export interface NpsPromptShownPayload {
+  readonly audit_count: number;
+  readonly page: string;
+  readonly timestamp: number;
+}
+
+/** Payload for nps_score_submitted event. */
+export interface NpsScoreSubmittedPayload {
+  readonly score: number;
+  readonly category: string;
+  readonly has_followup: boolean;
+  readonly page: string;
+  readonly timestamp: number;
+}
+
+/** Payload for friction_report_submitted event. */
+export interface FrictionReportSubmittedPayload {
+  readonly category: string;
+  readonly has_screenshot: boolean;
+  readonly page: string;
+  readonly session_duration_s: number;
+  readonly timestamp: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -229,6 +294,41 @@ export function trackResultsView(payload: ResultsViewPayload): void {
 /** T-PERF-122-007: export_click — fires on export button click. */
 export function trackExportClick(payload: ExportClickPayload): void {
   track("export_click", { ...payload });
+}
+
+/* ------------------------------------------------------------------ */
+/* PERF-141: Feedback event helpers                                    */
+/* No open-text content in PostHog payloads (PII separation per D3).  */
+/* ------------------------------------------------------------------ */
+
+/** T-PERF-141-001: feedback_survey_shown — fires when survey panel appears. */
+export function trackFeedbackSurveyShown(payload: FeedbackSurveyShownPayload): void {
+  track("feedback_survey_shown", { ...payload });
+}
+
+/** T-PERF-141-002: feedback_survey_submitted — fires on survey submit. */
+export function trackFeedbackSurveySubmitted(payload: FeedbackSurveySubmittedPayload): void {
+  track("feedback_survey_submitted", { ...payload });
+}
+
+/** T-PERF-141-003: feedback_survey_dismissed — fires on survey dismiss. */
+export function trackFeedbackSurveyDismissed(payload: FeedbackSurveyDismissedPayload): void {
+  track("feedback_survey_dismissed", { ...payload });
+}
+
+/** T-PERF-141-004: nps_prompt_shown — fires when NPS toast appears. */
+export function trackNpsPromptShown(payload: NpsPromptShownPayload): void {
+  track("nps_prompt_shown", { ...payload });
+}
+
+/** T-PERF-141-005: nps_score_submitted — fires on NPS score submit. */
+export function trackNpsScoreSubmitted(payload: NpsScoreSubmittedPayload): void {
+  track("nps_score_submitted", { ...payload });
+}
+
+/** T-PERF-141-006: friction_report_submitted — fires on friction report submit. */
+export function trackFrictionReportSubmitted(payload: FrictionReportSubmittedPayload): void {
+  track("friction_report_submitted", { ...payload });
 }
 
 /* ------------------------------------------------------------------ */

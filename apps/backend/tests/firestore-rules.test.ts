@@ -30,6 +30,8 @@
  *   T-SEC-011: Unauthenticated access denied for all collections
  *   T-SEC-012: Admin SDK (withSecurityRulesDisabled) can write to all collections
  *   T-SEC-013: Authenticated user cannot read other users' projects
+ *   T-SEC-014: Feedback — create-only for auth user matching userId, no client reads
+ *   T-SEC-015: Feedback preferences — read/write for auth user matching own userId
  */
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
@@ -82,6 +84,8 @@ describe("Firestore rules — structural validation", () => {
       "match /recommendations/{recommendationId}",
       "match /summaries/{summaryId}",
       "match /exports/{exportId}",
+      "match /feedback/{docId}",
+      "match /feedback_preferences/{userId}",
     ];
 
     for (const collection of requiredCollections) {
@@ -160,6 +164,25 @@ describe("Firestore rules — structural validation", () => {
     expect(rulesContent).toContain("function isOwner(userId)");
     expect(rulesContent).toContain("isAuthenticated()");
     expect(rulesContent).toContain("request.auth.uid == userId");
+  });
+
+  // T-SEC-014: Feedback collection — create-only, no client reads
+  it("feedback collection allows create with userId match and denies reads", () => {
+    const feedbackSection = rulesContent.slice(
+      rulesContent.indexOf("match /feedback/{docId}"),
+      rulesContent.indexOf("match /feedback_preferences/")
+    );
+    expect(feedbackSection).toContain("allow create: if isAuthenticated()");
+    expect(feedbackSection).toContain("request.resource.data.userId == request.auth.uid");
+    expect(feedbackSection).toContain("allow read: if false");
+  });
+
+  // T-SEC-015: Feedback preferences — read/write for own userId
+  it("feedback_preferences collection allows read/write for own userId via isOwner", () => {
+    const prefsSection = rulesContent.slice(
+      rulesContent.indexOf("match /feedback_preferences/{userId}")
+    );
+    expect(prefsSection).toContain("allow read, write: if isOwner(userId)");
   });
 });
 
