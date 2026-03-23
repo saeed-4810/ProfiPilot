@@ -60,6 +60,7 @@ export default function VerifyEmailPage() {
         return;
       }
 
+      // Uses Firebase default template (no actionCodeSettings) — avoids domain whitelisting issues
       await sendEmailVerification(currentUser);
       trackEmailVerificationSent({ method: "resend", timestamp: Date.now() });
       setPageState("success");

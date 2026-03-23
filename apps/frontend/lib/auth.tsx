@@ -40,6 +40,10 @@ import {
 import { getFirebaseAuth } from "@/lib/firebase-client";
 
 /* ------------------------------------------------------------------ */
+/* Email verification action code settings                             */
+/* ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ */
 /* Types                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -210,6 +214,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const credential = await createUserWithEmailAndPassword(auth, email, password);
 
       // T-PERF-138-002: Send verification email instead of establishing session
+      // Uses Firebase default template (no actionCodeSettings) — avoids domain whitelisting issues
       await sendEmailVerification(credential.user);
 
       // Sign out the Firebase client — user must verify email before signing in

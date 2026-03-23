@@ -49,7 +49,7 @@ jobs:
               ref: context.sha,
             });
             const buildCheck = checks.data.check_runs.find(
-              (r) => r.name === 'build' && r.conclusion === 'success'
+              (r) => r.name.toLowerCase() === 'build' && r.conclusion === 'success'
             );
             if (!buildCheck) {
               core.setFailed('CI build has not passed on this commit. Push to main and wait for CI first.');
@@ -79,7 +79,6 @@ jobs:
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
 
       - name: Build and push backend image
-        working-directory: code
         run: |
           IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_STAGE }}/containers/${{ env.BACKEND_SERVICE }}"
           docker build \
@@ -155,7 +154,6 @@ jobs:
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
 
       - name: Build and push frontend image
-        working-directory: code
         run: |
           IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_STAGE }}/containers/${{ env.FRONTEND_SERVICE }}"
           docker build \
@@ -214,7 +212,6 @@ jobs:
           firebaseServiceAccount: ${{ secrets.GCP_SA_KEY_STAGE }}
           projectId: ${{ secrets.FIREBASE_PROJECT_ID_STAGE }}
           channelId: live
-          entryPoint: code
 
   smoke-test:
     needs: deploy-hosting
