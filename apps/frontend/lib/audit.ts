@@ -10,6 +10,20 @@ export interface CreateAuditResponse {
 /** Audit job status values per ADR-006 state machine. */
 export type AuditStatus = "queued" | "running" | "retrying" | "completed" | "failed" | "cancelled";
 
+/** Raw CWV metrics from the audit status response. */
+export interface AuditMetrics {
+  lcp: number | null;
+  cls: number | null;
+  tbt: number | null;
+  fcp: number | null;
+  si: number | null;
+  ttfb: number | null;
+  performanceScore: number | null;
+  lighthouseVersion?: string;
+  fieldData?: Record<string, unknown>;
+  fetchedAt?: string;
+}
+
 /** Response from GET /audits/:id/status (CTR-006). */
 export interface AuditStatusResponse {
   jobId: string;
@@ -19,6 +33,7 @@ export interface AuditStatusResponse {
   updatedAt: string;
   completedAt?: string;
   lastError?: string;
+  metrics?: AuditMetrics;
 }
 
 /** API error envelope per ADR-003. */

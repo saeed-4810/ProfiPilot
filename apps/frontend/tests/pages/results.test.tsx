@@ -17,6 +17,16 @@ vi.mock("next/navigation", () => ({
 
 const mockGetRecommendations = vi.fn();
 const mockGetSummary = vi.fn();
+const mockGetAuditStatus = vi.fn();
+
+vi.mock("@/lib/audit", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    getAuditStatus: (...args: unknown[]) => mockGetAuditStatus(...args),
+  };
+});
+
 vi.mock("@/lib/results", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
@@ -26,12 +36,80 @@ vi.mock("@/lib/results", async (importOriginal) => {
   };
 });
 
+/* ------------------------------------------------------------------ */
+/* Mock framer-motion for expandable recommendations (PERF-143)        */
+/* ------------------------------------------------------------------ */
+
+function mockMotionComponent(Tag: string) {
+  return function MotionMock({ children, ...props }: Record<string, unknown>) {
+    const domProps: Record<string, unknown> = {};
+    const domSafeKeys = [
+      "className",
+      "data-testid",
+      "role",
+      "aria-label",
+      "aria-hidden",
+      "aria-expanded",
+      "style",
+    ];
+    for (const key of Object.keys(props)) {
+      if (domSafeKeys.includes(key) || key.startsWith("data-") || key.startsWith("aria-")) {
+        domProps[key] = props[key];
+      }
+    }
+    const El = Tag as unknown as React.ElementType;
+    return <El {...domProps}>{children as React.ReactNode}</El>;
+  };
+}
+
+const mockMotionValue = {
+  set: vi.fn(),
+  get: vi.fn().mockReturnValue(0),
+  on: vi.fn().mockReturnValue(vi.fn()),
+};
+
+vi.mock("framer-motion", () => ({
+  motion: {
+    div: mockMotionComponent("div"),
+    circle: mockMotionComponent("circle"),
+    path: mockMotionComponent("path"),
+    svg: mockMotionComponent("svg"),
+  },
+  AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useReducedMotion: () => false,
+  useMotionValue: () => mockMotionValue,
+  useTransform: (_mv: unknown, fn: (v: number) => number) => ({
+    ...mockMotionValue,
+    get: () => fn(mockMotionValue.get()),
+    on: vi.fn().mockReturnValue(vi.fn()),
+  }),
+  animate: vi.fn().mockReturnValue({ stop: vi.fn() }),
+}));
+
 // Import after mocks
 import ResultsPage from "../../app/(authenticated)/results/page";
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockSearchParamsId = "audit-123";
+  // Default: return completed audit with metrics
+  mockGetAuditStatus.mockResolvedValue({
+    jobId: "audit-123",
+    status: "completed",
+    retryCount: 0,
+    createdAt: "2026-03-23T00:00:00Z",
+    updatedAt: "2026-03-23T00:00:05Z",
+    completedAt: "2026-03-23T00:00:05Z",
+    metrics: {
+      lcp: 2100,
+      cls: 0.05,
+      tbt: 150,
+      fcp: 1200,
+      si: 1800,
+      ttfb: null,
+      performanceScore: 0.85,
+    },
+  });
 });
 
 afterEach(() => {
@@ -138,7 +216,7 @@ describe("P-PERF-102-001: User views recommendations sorted by severity", () => 
       expect(screen.getByTestId("recommendations")).toBeInTheDocument();
     });
 
-    const cards = screen.getAllByTestId(/^recommendation-/);
+    const cards = screen.getAllByTestId(/^recommendation-\d+$/);
     expect(cards).toHaveLength(4);
 
     // Verify sort order: P0 (LCP), P1 (FID), P2 (CLS), P3 (TTFB)
@@ -148,7 +226,7 @@ describe("P-PERF-102-001: User views recommendations sorted by severity", () => 
     expect(cards[3]).toHaveAttribute("aria-label", "P3 recommendation: TTFB");
   });
 
-  it("displays recommendation details: metric, currentValue, targetValue, suggestedFix, evidence", async () => {
+  it("displays recommendation details when expanded: metric, currentValue, targetValue, suggestedFix, evidence", async () => {
     mockGetRecommendations.mockResolvedValue(
       makeRecommendationsResponse([
         makeRecommendation({
@@ -163,16 +241,27 @@ describe("P-PERF-102-001: User views recommendations sorted by severity", () => 
     );
     mockGetSummary.mockResolvedValue(makeSummaryResponse({ tickets: [] }));
 
+    const user = userEvent.setup();
     render(<ResultsPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("LCP")).toBeInTheDocument();
+      // LCP appears in both MetricCard header and recommendation toggle — use getAllByText
+      expect(screen.getAllByText("LCP").length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Expand the recommendation
+    await user.click(screen.getByTestId("recommendation-toggle-0"));
+
+    await waitFor(() => {
       expect(screen.getByText("Current: 4.2s")).toBeInTheDocument();
       expect(screen.getByText("Target: 2.5s")).toBeInTheDocument();
       expect(screen.getByText("Optimize hero image.")).toBeInTheDocument();
       expect(screen.getByText("Actual: 4200, Threshold: 2500, Delta: +1700ms")).toBeInTheDocument();
-      expect(screen.getByText("(Performance)")).toBeInTheDocument();
     });
+
+    // Category tag is always visible in the header (styled as pill tag, no parentheses)
+    // "Performance" appears in both MetricCard label and recommendation category tag
+    expect(screen.getAllByText("Performance").length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -264,9 +353,17 @@ describe("P-PERF-102-003: User views dev ticket backlog", () => {
 /* ================================================================== */
 
 describe("P-PERF-102-004: All metrics good → congratulatory message", () => {
-  it("shows congratulatory message when no recommendations and no tickets", async () => {
+  it("shows congratulatory message when no recommendations, no tickets, and no metrics", async () => {
     mockGetRecommendations.mockResolvedValue(makeRecommendationsResponse([]));
     mockGetSummary.mockResolvedValue(makeSummaryResponse({ executiveSummary: null, tickets: [] }));
+    // No metrics → triggers empty state
+    mockGetAuditStatus.mockResolvedValue({
+      jobId: "audit-123",
+      status: "completed",
+      retryCount: 0,
+      createdAt: "2026-03-23T00:00:00Z",
+      updatedAt: "2026-03-23T00:00:05Z",
+    });
 
     render(<ResultsPage />);
 
@@ -278,6 +375,19 @@ describe("P-PERF-102-004: All metrics good → congratulatory message", () => {
       expect(
         screen.getByText("All Core Web Vitals are within target thresholds.")
       ).toBeInTheDocument();
+    });
+  });
+
+  it("shows metrics overview even with zero recommendations when metrics are available", async () => {
+    mockGetRecommendations.mockResolvedValue(makeRecommendationsResponse([]));
+    mockGetSummary.mockResolvedValue(makeSummaryResponse({ executiveSummary: null, tickets: [] }));
+    // Metrics available → success state with metric cards
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("results-content")).toBeInTheDocument();
+      expect(screen.getByTestId("metrics-overview")).toBeInTheDocument();
     });
   });
 });
@@ -819,11 +929,11 @@ describe("MotionWrapper integration", () => {
 });
 
 /* ================================================================== */
-/* Additional: Recommendation with empty evidence                     */
+/* Additional: Recommendation with evidence (expanded)                */
 /* ================================================================== */
 
 describe("Recommendation evidence rendering", () => {
-  it("renders evidence object as formatted string", async () => {
+  it("renders evidence object as formatted string when expanded", async () => {
     mockGetRecommendations.mockResolvedValue(
       makeRecommendationsResponse([
         makeRecommendation({
@@ -834,15 +944,24 @@ describe("Recommendation evidence rendering", () => {
     );
     mockGetSummary.mockResolvedValue(makeSummaryResponse({ tickets: [] }));
 
+    const user = userEvent.setup();
     render(<ResultsPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Fix the issue.")).toBeInTheDocument();
+      expect(screen.getByTestId("recommendation-toggle-0")).toBeInTheDocument();
     });
 
-    // Evidence should be rendered as formatted string
-    const recommendation = screen.getByTestId("recommendation-0");
-    const italicElements = recommendation.querySelectorAll(".italic");
+    // Expand the recommendation to see evidence
+    await user.click(screen.getByTestId("recommendation-toggle-0"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("recommendation-detail-0")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Fix the issue.")).toBeInTheDocument();
+
+    const detail = screen.getByTestId("recommendation-detail-0");
+    const italicElements = detail.querySelectorAll(".italic");
     expect(italicElements).toHaveLength(1);
     expect(italicElements[0]?.textContent).toBe("Actual: 650, Threshold: 200, Delta: +450ms");
   });
@@ -884,6 +1003,86 @@ describe("Dev ticket with empty estimatedImpact", () => {
 });
 
 /* ================================================================== */
+/* PERF-143: Copy ticket as markdown                                   */
+/* ================================================================== */
+
+describe("PERF-143: Copy ticket as markdown", () => {
+  it("copy button is clickable and invokes clipboard (graceful when unavailable)", async () => {
+    mockGetRecommendations.mockResolvedValue(makeRecommendationsResponse([]));
+    mockGetSummary.mockResolvedValue(
+      makeSummaryResponse({
+        tickets: [
+          {
+            title: "Fix LCP on homepage",
+            description: "The largest contentful paint is above threshold.",
+            priority: "P0",
+            category: "Performance",
+            metric: "LCP",
+            currentValue: "4.2s",
+            targetValue: "2.5s",
+            estimatedImpact: "Expected 15% improvement in bounce rate.",
+            suggestedFix: "Optimize hero image and defer non-critical JS.",
+          },
+        ],
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("ticket-copy-btn-0")).toBeInTheDocument();
+    });
+
+    // Click should not throw even when clipboard API is unavailable in jsdom
+    const btn = screen.getByTestId("ticket-copy-btn-0");
+    await user.click(btn);
+
+    // Button should still be in the document after click (no crash)
+    expect(btn).toBeInTheDocument();
+  });
+
+  it("renders copy button with data-testid for each ticket", async () => {
+    mockGetRecommendations.mockResolvedValue(makeRecommendationsResponse([]));
+    mockGetSummary.mockResolvedValue(
+      makeSummaryResponse({
+        tickets: [
+          {
+            title: "Ticket 1",
+            description: "Desc 1",
+            priority: "P0",
+            category: "Performance",
+            metric: "LCP",
+            currentValue: "4.2s",
+            targetValue: "2.5s",
+            estimatedImpact: "High",
+            suggestedFix: "Fix 1.",
+          },
+          {
+            title: "Ticket 2",
+            description: "Desc 2",
+            priority: "P1",
+            category: "Stability",
+            metric: "CLS",
+            currentValue: "0.25",
+            targetValue: "0.1",
+            estimatedImpact: "Medium",
+            suggestedFix: "Fix 2.",
+          },
+        ],
+      })
+    );
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("ticket-copy-btn-0")).toBeInTheDocument();
+      expect(screen.getByTestId("ticket-copy-btn-1")).toBeInTheDocument();
+    });
+  });
+});
+
+/* ================================================================== */
 /* Additional: sortBySeverity and getSeverityBadgeVariant exports      */
 /* ================================================================== */
 
@@ -918,5 +1117,356 @@ describe("lib/results utility exports", () => {
     expect(getSeverityBadgeVariant("P1")).toBe("warning");
     expect(getSeverityBadgeVariant("P2")).toBe("info");
     expect(getSeverityBadgeVariant("P3")).toBe("neutral");
+  });
+});
+
+/* ================================================================== */
+/* PERF-143: Metrics overview section                                  */
+/* ================================================================== */
+
+describe("PERF-143: Metrics overview section", () => {
+  it("renders metrics overview with MetricCards when recommendations exist", async () => {
+    mockGetRecommendations.mockResolvedValue(
+      makeRecommendationsResponse([
+        makeRecommendation({ severity: "P0", metric: "LCP", currentValue: "4.2s" }),
+        makeRecommendation({ ruleId: "r-2", severity: "P1", metric: "CLS", currentValue: "0.25" }),
+      ])
+    );
+    mockGetSummary.mockResolvedValue(makeSummaryResponse({ tickets: [] }));
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("metrics-overview")).toBeInTheDocument();
+      expect(screen.getByText("Core Web Vitals")).toBeInTheDocument();
+    });
+
+    // Should have MetricCards for LCP and CLS
+    expect(screen.getByTestId("metric-card-lcp")).toBeInTheDocument();
+    expect(screen.getByTestId("metric-card-cls")).toBeInTheDocument();
+  });
+
+  it("renders metrics overview from audit status even with no recommendations", async () => {
+    mockGetRecommendations.mockResolvedValue(makeRecommendationsResponse([]));
+    mockGetSummary.mockResolvedValue(
+      makeSummaryResponse({
+        tickets: [
+          {
+            title: "Some ticket",
+            description: "Desc",
+            priority: "P1",
+            category: "Performance",
+            metric: "LCP",
+            currentValue: "3.0s",
+            targetValue: "2.5s",
+            estimatedImpact: "Better",
+            suggestedFix: "Fix it.",
+          },
+        ],
+      })
+    );
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("results-content")).toBeInTheDocument();
+    });
+
+    // Metrics overview IS shown because auditMetrics are available from status endpoint
+    expect(screen.getByTestId("metrics-overview")).toBeInTheDocument();
+  });
+
+  it("renders poor-rated metrics when scores are very bad", async () => {
+    mockGetRecommendations.mockResolvedValue(makeRecommendationsResponse([]));
+    mockGetSummary.mockResolvedValue(makeSummaryResponse({ executiveSummary: null, tickets: [] }));
+    mockGetAuditStatus.mockResolvedValue({
+      jobId: "audit-123",
+      status: "completed",
+      retryCount: 0,
+      createdAt: "2026-03-23T00:00:00Z",
+      updatedAt: "2026-03-23T00:00:05Z",
+      metrics: {
+        lcp: 8000,
+        cls: 0.5,
+        tbt: 2000,
+        fcp: 5000,
+        si: 10000,
+        ttfb: null,
+        performanceScore: 0.2,
+      },
+    });
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("metrics-overview")).toBeInTheDocument();
+    });
+  });
+
+  it("does not render metrics overview when audit status has no metrics", async () => {
+    mockGetRecommendations.mockResolvedValue(makeRecommendationsResponse([]));
+    mockGetSummary.mockResolvedValue(
+      makeSummaryResponse({
+        tickets: [
+          {
+            title: "Some ticket",
+            description: "Desc",
+            priority: "P1",
+            category: "Performance",
+            metric: "LCP",
+            currentValue: "3.0s",
+            targetValue: "2.5s",
+            estimatedImpact: "Better",
+            suggestedFix: "Fix it.",
+          },
+        ],
+      })
+    );
+    // No metrics in status response
+    mockGetAuditStatus.mockResolvedValue({
+      jobId: "audit-123",
+      status: "completed",
+      retryCount: 0,
+      createdAt: "2026-03-23T00:00:00Z",
+      updatedAt: "2026-03-23T00:00:05Z",
+    });
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("results-content")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId("metrics-overview")).not.toBeInTheDocument();
+  });
+
+  it("uses worst severity for duplicate metrics", async () => {
+    mockGetRecommendations.mockResolvedValue(
+      makeRecommendationsResponse([
+        makeRecommendation({ ruleId: "r-1", severity: "P1", metric: "LCP", currentValue: "3.0s" }),
+        makeRecommendation({ ruleId: "r-2", severity: "P0", metric: "LCP", currentValue: "4.2s" }),
+      ])
+    );
+    mockGetSummary.mockResolvedValue(makeSummaryResponse({ tickets: [] }));
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("metrics-overview")).toBeInTheDocument();
+    });
+
+    // Should only have one LCP card (deduplicated)
+    const lcpCards = screen.getAllByTestId("metric-card-lcp");
+    expect(lcpCards).toHaveLength(1);
+  });
+});
+
+/* ================================================================== */
+/* PERF-143: Expandable recommendations                                */
+/* ================================================================== */
+
+describe("PERF-143: Expandable recommendations", () => {
+  it("recommendations start collapsed (no detail visible)", async () => {
+    mockGetRecommendations.mockResolvedValue(makeRecommendationsResponse([makeRecommendation()]));
+    mockGetSummary.mockResolvedValue(makeSummaryResponse({ tickets: [] }));
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("recommendations")).toBeInTheDocument();
+    });
+
+    // Detail should not be visible initially
+    expect(screen.queryByTestId("recommendation-detail-0")).not.toBeInTheDocument();
+  });
+
+  it("clicking toggle expands recommendation to show details", async () => {
+    mockGetRecommendations.mockResolvedValue(
+      makeRecommendationsResponse([
+        makeRecommendation({
+          suggestedFix: "Optimize hero image.",
+          currentValue: "4.2s",
+          targetValue: "2.5s",
+        }),
+      ])
+    );
+    mockGetSummary.mockResolvedValue(makeSummaryResponse({ tickets: [] }));
+
+    const user = userEvent.setup();
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("recommendation-toggle-0")).toBeInTheDocument();
+    });
+
+    // Click to expand
+    await user.click(screen.getByTestId("recommendation-toggle-0"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("recommendation-detail-0")).toBeInTheDocument();
+      expect(screen.getByText("Optimize hero image.")).toBeInTheDocument();
+      expect(screen.getByText("Current: 4.2s")).toBeInTheDocument();
+      expect(screen.getByText("Target: 2.5s")).toBeInTheDocument();
+    });
+  });
+
+  it("clicking toggle again collapses recommendation", async () => {
+    mockGetRecommendations.mockResolvedValue(makeRecommendationsResponse([makeRecommendation()]));
+    mockGetSummary.mockResolvedValue(makeSummaryResponse({ tickets: [] }));
+
+    const user = userEvent.setup();
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("recommendation-toggle-0")).toBeInTheDocument();
+    });
+
+    // Expand
+    await user.click(screen.getByTestId("recommendation-toggle-0"));
+    await waitFor(() => {
+      expect(screen.getByTestId("recommendation-detail-0")).toBeInTheDocument();
+    });
+
+    // Collapse
+    await user.click(screen.getByTestId("recommendation-toggle-0"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("recommendation-detail-0")).not.toBeInTheDocument();
+    });
+  });
+
+  it("toggle button has aria-expanded attribute", async () => {
+    mockGetRecommendations.mockResolvedValue(makeRecommendationsResponse([makeRecommendation()]));
+    mockGetSummary.mockResolvedValue(makeSummaryResponse({ tickets: [] }));
+
+    const user = userEvent.setup();
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("recommendation-toggle-0")).toBeInTheDocument();
+    });
+
+    const toggle = screen.getByTestId("recommendation-toggle-0");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(toggle);
+
+    await waitFor(() => {
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+    });
+  });
+
+  it("shows chevron icon on recommendation toggle", async () => {
+    mockGetRecommendations.mockResolvedValue(makeRecommendationsResponse([makeRecommendation()]));
+    mockGetSummary.mockResolvedValue(makeSummaryResponse({ tickets: [] }));
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chevron-icon")).toBeInTheDocument();
+    });
+  });
+
+  it("uses severity icon badges on recommendations (PERF-143)", async () => {
+    mockGetRecommendations.mockResolvedValue(
+      makeRecommendationsResponse([
+        makeRecommendation({ ruleId: "r-1", severity: "P0", metric: "LCP" }),
+        makeRecommendation({ ruleId: "r-2", severity: "P1", metric: "CLS" }),
+        makeRecommendation({ ruleId: "r-3", severity: "P2", metric: "TBT" }),
+        makeRecommendation({ ruleId: "r-4", severity: "P3", metric: "TTFB" }),
+      ])
+    );
+    mockGetSummary.mockResolvedValue(makeSummaryResponse({ tickets: [] }));
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("recommendations")).toBeInTheDocument();
+    });
+
+    // All severity badges should have icon prefixes
+    const badgeIcons = screen.getAllByTestId("badge-icon");
+    expect(badgeIcons.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("can expand multiple recommendations independently", async () => {
+    mockGetRecommendations.mockResolvedValue(
+      makeRecommendationsResponse([
+        makeRecommendation({ ruleId: "r-1", severity: "P0", metric: "LCP" }),
+        makeRecommendation({ ruleId: "r-2", severity: "P1", metric: "CLS" }),
+      ])
+    );
+    mockGetSummary.mockResolvedValue(makeSummaryResponse({ tickets: [] }));
+
+    const user = userEvent.setup();
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("recommendation-toggle-0")).toBeInTheDocument();
+      expect(screen.getByTestId("recommendation-toggle-1")).toBeInTheDocument();
+    });
+
+    // Expand both
+    await user.click(screen.getByTestId("recommendation-toggle-0"));
+    await user.click(screen.getByTestId("recommendation-toggle-1"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("recommendation-detail-0")).toBeInTheDocument();
+      expect(screen.getByTestId("recommendation-detail-1")).toBeInTheDocument();
+    });
+  });
+});
+
+/* ================================================================== */
+/* PERF-143: extractMetrics utility                                    */
+/* ================================================================== */
+
+describe("PERF-143: extractMetrics utility", () => {
+  it("extracts unique metrics from recommendations", async () => {
+    const { extractMetrics } = await import("../../lib/results");
+
+    const recs = [
+      makeRecommendation({ ruleId: "r-1", severity: "P0", metric: "LCP", currentValue: "4.2s" }),
+      makeRecommendation({ ruleId: "r-2", severity: "P1", metric: "CLS", currentValue: "0.25" }),
+    ];
+
+    const metrics = extractMetrics(recs);
+    expect(metrics).toHaveLength(2);
+    expect(metrics[0]?.label).toBe("LCP");
+    expect(metrics[1]?.label).toBe("CLS");
+  });
+
+  it("keeps worst severity for duplicate metrics", async () => {
+    const { extractMetrics } = await import("../../lib/results");
+
+    const recs = [
+      makeRecommendation({ ruleId: "r-1", severity: "P2", metric: "LCP", currentValue: "3.0s" }),
+      makeRecommendation({ ruleId: "r-2", severity: "P0", metric: "LCP", currentValue: "4.2s" }),
+    ];
+
+    const metrics = extractMetrics(recs);
+    expect(metrics).toHaveLength(1);
+    expect(metrics[0]?.rating).toBe("poor"); // P0 → poor
+    expect(metrics[0]?.score).toBe(20); // P0 score
+  });
+
+  it("returns empty array for no recommendations", async () => {
+    const { extractMetrics } = await import("../../lib/results");
+
+    const metrics = extractMetrics([]);
+    expect(metrics).toHaveLength(0);
+  });
+
+  it("maps P2 and P3 to good rating", async () => {
+    const { extractMetrics } = await import("../../lib/results");
+
+    const recs = [
+      makeRecommendation({ ruleId: "r-1", severity: "P2", metric: "CLS", currentValue: "0.08" }),
+      makeRecommendation({ ruleId: "r-2", severity: "P3", metric: "TTFB", currentValue: "200ms" }),
+    ];
+
+    const metrics = extractMetrics(recs);
+    expect(metrics).toHaveLength(2);
+    expect(metrics[0]?.rating).toBe("good");
+    expect(metrics[1]?.rating).toBe("good");
   });
 });

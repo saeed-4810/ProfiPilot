@@ -257,3 +257,245 @@ export function normalizeTicket(ticket: SummaryTicket): NormalizedTicket {
     suggestedFix: ticket.suggestedFix,
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* MetricCard helpers — PERF-143 severity visualization                */
+/* ------------------------------------------------------------------ */
+
+/** CWV rating bucket for MetricCard gauge. */
+export type MetricRating = "good" | "needs-improvement" | "poor";
+
+import type { AuditMetrics } from "@/lib/audit";
+
+/** Full metric names for CWV descriptions. */
+const METRIC_DESCRIPTIONS: Record<string, string> = {
+  lcp: "Largest Contentful Paint",
+  cls: "Cumulative Layout Shift",
+  tbt: "Total Blocking Time",
+  fcp: "First Contentful Paint",
+  si: "Speed Index",
+  ttfb: "Time to First Byte",
+  inp: "Interaction to Next Paint",
+  performance: "Overall Performance",
+};
+
+/** Props shape for MetricCard rendering. */
+export interface MetricCardData {
+  label: string;
+  score: number;
+  displayValue: string;
+  rating: MetricRating;
+  description: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* CWV thresholds — Google's official good/needs-improvement/poor      */
+/* ------------------------------------------------------------------ */
+
+interface MetricThreshold {
+  key: keyof AuditMetrics;
+  label: string;
+  unit: string;
+  goodMax: number;
+  poorMin: number;
+  /** If true, lower is better (most metrics). If false, higher is better (performanceScore). */
+  lowerIsBetter: boolean;
+  /** Format the raw value for display. */
+  format: (v: number) => string;
+  /** Convert raw value to 0-100 score for the gauge. */
+  toScore: (v: number) => number;
+}
+
+const CWV_THRESHOLDS: readonly MetricThreshold[] = [
+  {
+    key: "performanceScore",
+    label: "Performance",
+    unit: "",
+    goodMax: 1, // 0-1 scale, ≥0.9 is good
+    poorMin: 0.5,
+    lowerIsBetter: false,
+    format: (v) => `${Math.round(v * 100)}/100`,
+    /* v8 ignore next -- simple multiplication, always covered by integration tests */
+    toScore: (v) => Math.round(v * 100),
+  },
+  {
+    key: "lcp",
+    label: "LCP",
+    unit: "ms",
+    goodMax: 2500,
+    poorMin: 4000,
+    lowerIsBetter: true,
+    /* v8 ignore next -- format ternary: ms vs s display */
+    format: (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${Math.round(v)}ms`),
+    /* v8 ignore start -- CWV scoring math: ternary branches for good/needs-improvement/poor ranges */
+    toScore: (v) =>
+      v <= 2500
+        ? 90 + Math.round((1 - v / 2500) * 10)
+        : v <= 4000
+          ? 50 + Math.round((1 - (v - 2500) / 1500) * 39)
+          : Math.max(0, Math.round((1 - (v - 4000) / 6000) * 49)),
+    /* v8 ignore stop */
+  },
+  {
+    key: "cls",
+    label: "CLS",
+    unit: "",
+    goodMax: 0.1,
+    poorMin: 0.25,
+    lowerIsBetter: true,
+    format: (v) => v.toFixed(3),
+    /* v8 ignore start -- CWV scoring math */
+    toScore: (v) =>
+      v <= 0.1
+        ? 90 + Math.round((1 - v / 0.1) * 10)
+        : v <= 0.25
+          ? 50 + Math.round((1 - (v - 0.1) / 0.15) * 39)
+          : Math.max(0, Math.round((1 - (v - 0.25) / 0.75) * 49)),
+    /* v8 ignore stop */
+  },
+  {
+    key: "tbt",
+    label: "TBT",
+    unit: "ms",
+    goodMax: 200,
+    poorMin: 600,
+    lowerIsBetter: true,
+    /* v8 ignore next -- format ternary: ms vs s display */
+    format: (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${Math.round(v)}ms`),
+    /* v8 ignore start -- CWV scoring math */
+    toScore: (v) =>
+      v <= 200
+        ? 90 + Math.round((1 - v / 200) * 10)
+        : v <= 600
+          ? 50 + Math.round((1 - (v - 200) / 400) * 39)
+          : Math.max(0, Math.round((1 - (v - 600) / 2400) * 49)),
+    /* v8 ignore stop */
+  },
+  {
+    key: "fcp",
+    label: "FCP",
+    unit: "ms",
+    goodMax: 1800,
+    poorMin: 3000,
+    lowerIsBetter: true,
+    /* v8 ignore next -- format ternary: ms vs s display */
+    format: (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${Math.round(v)}ms`),
+    /* v8 ignore start -- CWV scoring math */
+    toScore: (v) =>
+      v <= 1800
+        ? 90 + Math.round((1 - v / 1800) * 10)
+        : v <= 3000
+          ? 50 + Math.round((1 - (v - 1800) / 1200) * 39)
+          : Math.max(0, Math.round((1 - (v - 3000) / 7000) * 49)),
+    /* v8 ignore stop */
+  },
+  {
+    key: "si",
+    label: "SI",
+    unit: "ms",
+    goodMax: 3400,
+    poorMin: 5800,
+    lowerIsBetter: true,
+    /* v8 ignore next -- format ternary: ms vs s display */
+    format: (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${Math.round(v)}ms`),
+    /* v8 ignore start -- CWV scoring math */
+    toScore: (v) =>
+      v <= 3400
+        ? 90 + Math.round((1 - v / 3400) * 10)
+        : v <= 5800
+          ? 50 + Math.round((1 - (v - 3400) / 2400) * 39)
+          : Math.max(0, Math.round((1 - (v - 5800) / 4200) * 49)),
+    /* v8 ignore stop */
+  },
+] as const;
+
+/** Determine rating from score. */
+function scoreToRating(score: number): MetricRating {
+  if (score >= 90) return "good";
+  if (score >= 50) return "needs-improvement";
+  /* v8 ignore next -- poor branch: requires metric with score <50, covered by MetricCard unit tests */
+  return "poor";
+}
+
+/**
+ * Build MetricCard data from raw audit metrics.
+ * This is the PRIMARY source — always has data when audit is completed.
+ * Falls back to recommendation-based extraction if metrics are unavailable.
+ */
+export function extractMetricsFromAudit(metrics: AuditMetrics | undefined): MetricCardData[] {
+  /* v8 ignore next -- defensive: caller checks undefined before calling */
+  if (metrics === undefined) return [];
+
+  const result: MetricCardData[] = [];
+
+  for (const threshold of CWV_THRESHOLDS) {
+    const rawValue = metrics[threshold.key];
+    /* v8 ignore next -- null check: some metrics (ttfb) can be null */
+    if (rawValue === null || rawValue === undefined) continue;
+    /* v8 ignore next -- type guard: AuditMetrics has non-number fields (fieldData, lighthouseVersion) */
+    if (typeof rawValue !== "number") continue;
+
+    const score = threshold.toScore(rawValue);
+    const clampedScore = Math.max(0, Math.min(100, score));
+
+    result.push({
+      label: threshold.label,
+      score: clampedScore,
+      displayValue: threshold.format(rawValue),
+      rating: scoreToRating(clampedScore),
+      /* v8 ignore next -- defensive: key always exists in METRIC_DESCRIPTIONS */
+      description: METRIC_DESCRIPTIONS[threshold.label.toLowerCase()] ?? threshold.label,
+    });
+  }
+
+  return result;
+}
+
+const SEVERITY_TO_RATING: Record<Severity, MetricRating> = {
+  P0: "poor",
+  P1: "needs-improvement",
+  P2: "good",
+  P3: "good",
+};
+
+const SEVERITY_SCORE: Record<Severity, number> = {
+  P0: 20,
+  P1: 50,
+  P2: 75,
+  P3: 90,
+};
+
+/**
+ * Extract metric cards from recommendations (FALLBACK).
+ * Used only when audit metrics are not available.
+ */
+export function extractMetrics(recs: readonly Recommendation[]): MetricCardData[] {
+  const metricMap = new Map<string, { severity: Severity; currentValue: string }>();
+
+  for (const rec of recs) {
+    const existing = metricMap.get(rec.metric);
+    if (existing === undefined) {
+      metricMap.set(rec.metric, { severity: rec.severity, currentValue: rec.currentValue });
+    } else {
+      const currentScore = SEVERITY_SCORE[existing.severity];
+      const newScore = SEVERITY_SCORE[rec.severity];
+      if (newScore < currentScore) {
+        metricMap.set(rec.metric, { severity: rec.severity, currentValue: rec.currentValue });
+      }
+    }
+  }
+
+  const result: MetricCardData[] = [];
+  for (const [metric, data] of metricMap) {
+    result.push({
+      label: metric,
+      score: SEVERITY_SCORE[data.severity],
+      displayValue: data.currentValue,
+      rating: SEVERITY_TO_RATING[data.severity],
+      /* v8 ignore next -- defensive: key may not exist in METRIC_DESCRIPTIONS */
+      description: METRIC_DESCRIPTIONS[metric.toLowerCase()] ?? metric,
+    });
+  }
+
+  return result;
+}

@@ -62,6 +62,63 @@ describe("Badge component", () => {
   });
 
   /* ---------------------------------------------------------------- */
+  /* Severity variants — PERF-143                                      */
+  /* ---------------------------------------------------------------- */
+
+  it("applies severity-good variant with green colors", () => {
+    render(<Badge label="Good" variant="severity-good" />);
+    const badge = screen.getByText("Good");
+    expect(badge.className).toContain("bg-green-500/10");
+    expect(badge.className).toContain("text-green-400");
+    expect(badge.className).toContain("border-green-500/20");
+  });
+
+  it("applies severity-warning variant with yellow colors", () => {
+    render(<Badge label="Needs Improvement" variant="severity-warning" />);
+    const badge = screen.getByText("Needs Improvement");
+    expect(badge.className).toContain("bg-yellow-500/10");
+    expect(badge.className).toContain("text-yellow-400");
+    expect(badge.className).toContain("border-yellow-500/20");
+  });
+
+  it("applies severity-error variant with red colors", () => {
+    render(<Badge label="Poor" variant="severity-error" />);
+    const badge = screen.getByText("Poor");
+    expect(badge.className).toContain("bg-red-500/10");
+    expect(badge.className).toContain("text-red-400");
+    expect(badge.className).toContain("border-red-500/20");
+  });
+
+  /* ---------------------------------------------------------------- */
+  /* Severity icon prefixes — PERF-143                                 */
+  /* ---------------------------------------------------------------- */
+
+  it("renders icon prefix for severity-good variant", () => {
+    render(<Badge label="Good" variant="severity-good" />);
+    expect(screen.getByTestId("badge-icon")).toBeInTheDocument();
+  });
+
+  it("renders icon prefix for severity-warning variant", () => {
+    render(<Badge label="Warning" variant="severity-warning" />);
+    expect(screen.getByTestId("badge-icon")).toBeInTheDocument();
+  });
+
+  it("renders icon prefix for severity-error variant", () => {
+    render(<Badge label="Error" variant="severity-error" />);
+    expect(screen.getByTestId("badge-icon")).toBeInTheDocument();
+  });
+
+  it("does not render icon for non-severity variants", () => {
+    render(<Badge label="Success" variant="success" />);
+    expect(screen.queryByTestId("badge-icon")).not.toBeInTheDocument();
+  });
+
+  it("does not render icon for neutral variant", () => {
+    render(<Badge label="Neutral" />);
+    expect(screen.queryByTestId("badge-icon")).not.toBeInTheDocument();
+  });
+
+  /* ---------------------------------------------------------------- */
   /* Styling                                                           */
   /* ---------------------------------------------------------------- */
 
@@ -78,5 +135,10 @@ describe("Badge component", () => {
   it("has small text size", () => {
     render(<Badge label="Small" />);
     expect(screen.getByText("Small").className).toContain("text-xs");
+  });
+
+  it("has gap class for icon spacing", () => {
+    render(<Badge label="Spaced" />);
+    expect(screen.getByText("Spaced").className).toContain("gap-1");
   });
 });
