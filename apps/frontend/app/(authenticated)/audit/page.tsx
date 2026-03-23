@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { MotionWrapper } from "@/components/MotionWrapper";
 import { trackPageView, trackAuditTrigger } from "@/lib/analytics";
+import { AuditProgress } from "@/components/ui/AuditProgress";
 import {
   createAudit,
   getAuditStatus,
-  getStatusMessage,
   isTerminalStatus,
   COPY_URL_VALIDATION_ERROR,
   COPY_ONBOARDING_HELPER,
@@ -38,6 +38,12 @@ type PageState = "empty" | "loading" | "success" | "error" | "blocked";
 /** Polling interval in milliseconds (3 seconds per requirements). */
 const POLL_INTERVAL_MS = 3_000;
 
+/** Step advance interval for time-based simulation (C1a). */
+const STEP_ADVANCE_MS = 4_000;
+
+/** Total number of progress steps. */
+const TOTAL_STEPS = 5;
+
 /* ------------------------------------------------------------------ */
 /* AuditPage component                                                */
 /* ------------------------------------------------------------------ */
@@ -51,11 +57,13 @@ export default function AuditPage() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const [progressStep, setProgressStep] = useState<number>(0);
 
   /* --- Refs --- */
   const urlInputRef = useRef<HTMLInputElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const stepTimerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   /** Stop any active polling interval. */
   const stopPolling = useCallback(() => {
@@ -65,13 +73,36 @@ export default function AuditPage() {
     }
   }, []);
 
-  /* --- Track page view + cleanup polling on unmount --- */
+  /** Stop the step advance timer. */
+  const stopStepTimer = useCallback(() => {
+    if (stepTimerRef.current !== undefined) {
+      clearInterval(stepTimerRef.current);
+      stepTimerRef.current = undefined;
+    }
+  }, []);
+
+  /** Start time-based step simulation (C1a). Advances step every 4s while running. */
+  const startStepTimer = useCallback(() => {
+    stopStepTimer();
+    stepTimerRef.current = setInterval(() => {
+      setProgressStep((prev) => {
+        // Don't advance past step 3 (0-indexed) — step 4 is reserved for "completed"
+        if (prev < TOTAL_STEPS - 2) {
+          return prev + 1;
+        }
+        return prev;
+      });
+    }, STEP_ADVANCE_MS);
+  }, [stopStepTimer]);
+
+  /* --- Track page view + cleanup polling/timers on unmount --- */
   useEffect(() => {
     trackPageView({ route: "/audit", timestamp: Date.now() });
     return () => {
       stopPolling();
+      stopStepTimer();
     };
-  }, [stopPolling]);
+  }, [stopPolling, stopStepTimer]);
 
   /* --- Poll audit status --- */
   const startPolling = useCallback(
@@ -86,16 +117,19 @@ export default function AuditPage() {
 
           if (isTerminalStatus(result.status)) {
             stopPolling();
+            stopStepTimer();
 
             if (result.status === "completed") {
+              // Set all steps to completed
+              setProgressStep(TOTAL_STEPS - 1);
               setPageState("success");
-              // Brief delay so user sees "Audit complete" before redirect
+              // Brief delay so user sees all checkmarks before redirect
               setTimeout(() => {
                 router.push(`/results?id=${id}`);
-              }, 800);
+              }, 1_000);
             } else if (result.status === "failed" || result.status === "cancelled") {
               setPageState("error");
-              setError(COPY_AUDIT_FAILED);
+              setError(result.lastError ?? COPY_AUDIT_FAILED);
             }
           }
         } catch (err: unknown) {
@@ -110,7 +144,7 @@ export default function AuditPage() {
         }
       }, POLL_INTERVAL_MS);
     },
-    [router, stopPolling]
+    [router, stopPolling, stopStepTimer]
   );
 
   /* --- Form submission --- */
@@ -139,12 +173,14 @@ export default function AuditPage() {
       trackAuditTrigger({ url: parsed.data.url, timestamp: Date.now() });
       setPageState("loading");
       setAuditStatus("queued");
+      setProgressStep(0);
 
       try {
         const result = await createAudit(parsed.data.url);
         setJobId(result.jobId);
         setAuditStatus(result.status);
         startPolling(result.jobId);
+        startStepTimer();
       } catch (err: unknown) {
         const typedErr = err as Error & { status?: number; code?: string };
 
@@ -168,7 +204,7 @@ export default function AuditPage() {
         setTimeout(() => errorRef.current?.focus(), 50);
       }
     },
-    [router, startPolling]
+    [router, startPolling, startStepTimer]
   );
 
   /* --- Retry handler --- */
@@ -178,12 +214,13 @@ export default function AuditPage() {
     setFieldError(null);
     setAuditStatus(null);
     setJobId(null);
+    setProgressStep(0);
+    stopStepTimer();
     setTimeout(() => urlInputRef.current?.focus(), 50);
-  }, []);
+  }, [stopStepTimer]);
 
   /* --- Derived state --- */
   const isLoading = pageState === "loading";
-  const statusMessage = auditStatus !== null ? getStatusMessage(auditStatus) : null;
 
   return (
     <MotionWrapper>
@@ -201,18 +238,32 @@ export default function AuditPage() {
             </p>
           )}
 
-          {/* Error banner — general errors (not field-level) */}
-          {pageState === "error" && error !== null && (
-            <div
-              ref={errorRef}
-              role="alert"
-              tabIndex={-1}
-              data-testid="audit-error"
-              className="mb-4 p-3 rounded bg-red-900/50 border border-red-500 text-red-200 text-sm"
-            >
-              {error}
+          {/* Error state with progress indicator showing failure point */}
+          {pageState === "error" && auditStatus !== null && auditStatus !== "queued" && (
+            <div data-testid="audit-error-progress" className="mb-4">
+              <AuditProgress
+                currentStep={progressStep}
+                failed={true}
+                /* v8 ignore next -- defensive: error is always set before reaching error+progress state */
+                errorMessage={error ?? COPY_AUDIT_FAILED}
+              />
             </div>
           )}
+
+          {/* Error banner — general errors (not field-level, no progress context) */}
+          {pageState === "error" &&
+            (auditStatus === null || auditStatus === "queued") &&
+            error !== null && (
+              <div
+                ref={errorRef}
+                role="alert"
+                tabIndex={-1}
+                data-testid="audit-error"
+                className="mb-4 p-3 rounded bg-red-900/50 border border-red-500 text-red-200 text-sm"
+              >
+                {error}
+              </div>
+            )}
 
           {/* URL submission form — visible in empty and error states */}
           {(pageState === "empty" || pageState === "error") && (
@@ -261,44 +312,29 @@ export default function AuditPage() {
             </form>
           )}
 
-          {/* Loading / progress state — polling indicator */}
+          {/* Loading / progress state — multi-step progress indicator (PERF-142) */}
           {pageState === "loading" && (
-            <div
-              data-testid="audit-progress"
-              role="status"
-              aria-live="polite"
-              className="flex flex-col items-center gap-4 mt-6"
-            >
-              <span
-                data-testid="audit-spinner"
-                className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"
-                aria-hidden="true"
-              />
-              {statusMessage !== null && (
-                <p data-testid="audit-status-message" className="text-neutral-300 text-sm">
-                  {statusMessage}
-                </p>
-              )}
+            <div data-testid="audit-progress" className="mt-6">
+              <AuditProgress currentStep={progressStep} failed={false} />
               {jobId !== null && (
-                <p data-testid="audit-job-id" className="text-neutral-500 text-xs">
+                <p data-testid="audit-job-id" className="text-neutral-500 text-xs text-center mt-4">
                   Job: {jobId}
                 </p>
               )}
             </div>
           )}
 
-          {/* Success state — brief confirmation before redirect */}
+          {/* Success state — all steps completed, redirecting */}
           {pageState === "success" && (
-            <div
-              data-testid="audit-success"
-              role="status"
-              className="flex flex-col items-center gap-4 mt-6"
-            >
-              {/* copy: audit-completed */}
-              <p data-testid="audit-status-message" className="text-green-400 text-sm font-medium">
+            <div data-testid="audit-success" className="mt-6">
+              <AuditProgress currentStep={TOTAL_STEPS - 1} failed={false} />
+              <p
+                data-testid="audit-status-message"
+                className="text-green-400 text-sm font-medium text-center mt-4"
+              >
                 {COPY_AUDIT_COMPLETED}
               </p>
-              <p className="text-neutral-500 text-xs">Redirecting to results...</p>
+              <p className="text-neutral-500 text-xs text-center mt-1">Redirecting to results...</p>
             </div>
           )}
 

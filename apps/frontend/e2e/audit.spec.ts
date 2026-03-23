@@ -61,17 +61,18 @@ test.describe("Audit flow — /audit", () => {
     await page.getByTestId("audit-url-input").fill("https://example.com");
     await page.getByTestId("audit-submit").click();
 
-    // Should show progress indicator (polling state)
+    // PERF-142: Should show multi-step progress stepper (polling state)
     await expect(page.getByTestId("audit-progress")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("audit-spinner")).toBeVisible();
+    await expect(page.getByTestId("audit-progress-stepper")).toBeVisible();
+    await expect(page.getByTestId("step-spinner")).toBeVisible();
 
     // Wait for audit to complete (polling — may take 30-120s)
     // Either success state or error state will appear
-    await expect(page.getByTestId("audit-success").or(page.getByTestId("audit-error"))).toBeVisible(
-      { timeout: 150_000 }
-    );
+    await expect(
+      page.getByTestId("audit-success").or(page.getByTestId("audit-error-progress"))
+    ).toBeVisible({ timeout: 150_000 });
 
-    // If successful, verify the success state has a link to results
+    // If successful, verify all checkmarks visible and completion message
     const success = page.getByTestId("audit-success");
     if (await success.isVisible()) {
       await expect(page.getByTestId("audit-status-message")).toContainText(/complete/i);
