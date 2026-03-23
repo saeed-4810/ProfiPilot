@@ -60,13 +60,8 @@ export default function VerifyEmailPage() {
         return;
       }
 
-      const authDomain = process.env["NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"] ?? "";
-      const baseUrl = authDomain !== "" ? `https://${authDomain}` : window.location.origin;
-
-      await sendEmailVerification(currentUser, {
-        url: `${baseUrl}/login`,
-        handleCodeInApp: false,
-      });
+      // Uses Firebase default template (no actionCodeSettings) — avoids domain whitelisting issues
+      await sendEmailVerification(currentUser);
       trackEmailVerificationSent({ method: "resend", timestamp: Date.now() });
       setPageState("success");
     } catch (err: unknown) {

@@ -172,37 +172,7 @@ describe("T-PERF-138-003: Resend calls sendEmailVerification on auth.currentUser
     await user.click(screen.getByTestId("verify-email-resend"));
 
     await waitFor(() => {
-      expect(mockSendEmailVerification).toHaveBeenCalledWith(mockCurrentUser, {
-        url: "http://localhost:3000/login",
-        handleCodeInApp: false,
-      });
+      expect(mockSendEmailVerification).toHaveBeenCalledWith(mockCurrentUser);
     });
-  });
-
-  it("uses NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN for actionCodeSettings when set", async () => {
-    const originalEnv = process.env["NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"];
-    process.env["NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"] = "prefpilot-stage.firebaseapp.com";
-
-    mockCurrentUser = { email: "domain@example.com" };
-    mockSendEmailVerification.mockResolvedValue(undefined);
-
-    const user = userEvent.setup();
-    render(<VerifyEmailPage />);
-
-    await user.click(screen.getByTestId("verify-email-resend"));
-
-    await waitFor(() => {
-      expect(mockSendEmailVerification).toHaveBeenCalledWith(mockCurrentUser, {
-        url: "https://prefpilot-stage.firebaseapp.com/login",
-        handleCodeInApp: false,
-      });
-    });
-
-    // Restore env
-    if (originalEnv === undefined) {
-      delete process.env["NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"];
-    } else {
-      process.env["NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"] = originalEnv;
-    }
   });
 });

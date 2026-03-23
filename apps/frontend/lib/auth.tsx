@@ -43,29 +43,6 @@ import { getFirebaseAuth } from "@/lib/firebase-client";
 /* Email verification action code settings                             */
 /* ------------------------------------------------------------------ */
 
-/**
- * Build actionCodeSettings for sendEmailVerification.
- * The `url` tells Firebase where to redirect after the user clicks the
- * verification link. Without this, Firebase uses a default template that
- * may produce broken links (empty apiKey, no domain).
- *
- * Uses NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN as the base URL since that's the
- * domain Firebase Auth recognizes. Falls back to window.location.origin
- * for local development.
- */
-function getVerificationActionCodeSettings(): { url: string; handleCodeInApp: boolean } {
-  const authDomain = process.env["NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"] ?? "";
-  // Use the Firebase Auth domain if configured (staging/production),
-  // otherwise fall back to the current window origin (local dev).
-  // This is a "use client" module — window is always available at call time.
-  const baseUrl = authDomain !== "" ? `https://${authDomain}` : window.location.origin;
-
-  return {
-    url: `${baseUrl}/login`,
-    handleCodeInApp: false,
-  };
-}
-
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
 /* ------------------------------------------------------------------ */
@@ -237,7 +214,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const credential = await createUserWithEmailAndPassword(auth, email, password);
 
       // T-PERF-138-002: Send verification email instead of establishing session
-      await sendEmailVerification(credential.user, getVerificationActionCodeSettings());
+      // Uses Firebase default template (no actionCodeSettings) — avoids domain whitelisting issues
+      await sendEmailVerification(credential.user);
 
       // Sign out the Firebase client — user must verify email before signing in
       await firebaseSignOut(auth);
@@ -257,7 +235,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (currentUser === null) {
       throw new Error("No user is currently signed in.");
     }
-    await sendEmailVerification(currentUser, getVerificationActionCodeSettings());
+    await sendEmailVerification(currentUser);
   }, []);
 
   /* --- signOut: server logout → Firebase signOut --- */

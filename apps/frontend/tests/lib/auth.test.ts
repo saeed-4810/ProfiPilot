@@ -595,10 +595,7 @@ describe("T-PERF-138-003: sendVerificationEmail resends to current user", () => 
     await user.click(screen.getByTestId("auth-resend-verification-btn"));
 
     await waitFor(() => {
-      expect(mockSendEmailVerification).toHaveBeenCalledWith(mockUser, {
-        url: "http://localhost:3000/login",
-        handleCodeInApp: false,
-      });
+      expect(mockSendEmailVerification).toHaveBeenCalledWith(mockUser);
     });
   });
 
@@ -646,10 +643,7 @@ describe("T-PERF-138-002: signUp creates account and sends verification email (A
         "new@example.com",
         "password123"
       );
-      expect(mockSendEmailVerification).toHaveBeenCalledWith(mockUser, {
-        url: "http://localhost:3000/login",
-        handleCodeInApp: false,
-      });
+      expect(mockSendEmailVerification).toHaveBeenCalledWith(mockUser);
       expect(mockFirebaseSignOut).toHaveBeenCalled();
       // verify-token should NOT be called — email must be verified first
       expect(mockFetch).not.toHaveBeenCalled();
@@ -715,39 +709,6 @@ describe("T-PERF-138-002: signUp creates account and sends verification email (A
     await waitFor(() => {
       expect(screen.getByTestId("auth-loading")).toHaveTextContent("true");
     });
-  });
-
-  it("uses NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN for actionCodeSettings when set", async () => {
-    const originalEnv = process.env["NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"];
-    process.env["NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"] = "prefpilot-stage.firebaseapp.com";
-
-    const mockUser = { email: "domain@example.com" };
-    mockCreateUserWithEmailAndPassword.mockResolvedValue({ user: mockUser });
-    mockSendEmailVerification.mockResolvedValue(undefined);
-    mockFirebaseSignOut.mockResolvedValue(undefined);
-
-    const user = userEvent.setup();
-    renderWithProvider();
-
-    act(() => {
-      authStateCallback?.(null);
-    });
-
-    await user.click(screen.getByTestId("auth-sign-up-btn"));
-
-    await waitFor(() => {
-      expect(mockSendEmailVerification).toHaveBeenCalledWith(mockUser, {
-        url: "https://prefpilot-stage.firebaseapp.com/login",
-        handleCodeInApp: false,
-      });
-    });
-
-    // Restore env
-    if (originalEnv === undefined) {
-      delete process.env["NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"];
-    } else {
-      process.env["NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"] = originalEnv;
-    }
   });
 
   it("handles non-Error thrown during signUp", async () => {
