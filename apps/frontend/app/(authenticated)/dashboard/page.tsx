@@ -3,12 +3,12 @@
 import { useState, useEffect, useCallback, useRef, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
+import { motion, AnimatePresence } from "framer-motion";
 import { MotionWrapper } from "@/components/MotionWrapper";
 import { trackPageView } from "@/lib/analytics";
 import { HealthDots } from "@/components/ui/HealthDots";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import { Toast } from "@/components/ui/Toast";
 import {
   listProjects,
@@ -17,6 +17,7 @@ import {
   addUrlToProject,
   deleteUrl,
   getLastAuditForProject,
+  getLatestAuditForUrl,
   COPY_DASHBOARD_EMPTY,
   COPY_URL_VALIDATION_ERROR,
   COPY_PROJECT_NAME_REQUIRED,
@@ -28,6 +29,7 @@ import {
   type ProjectItem,
   type ProjectUrl,
   type ProjectHealthData,
+  type UrlAuditInfo,
 } from "@/lib/projects";
 
 /* ------------------------------------------------------------------ */
@@ -129,6 +131,45 @@ function LinkIcon() {
   );
 }
 
+/* v8 ignore next 18 -- SpinnerIcon: presentational SVG, only renders during transient loading states */
+function SpinnerIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      className="animate-spin"
+      aria-hidden="true"
+    >
+      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+    </svg>
+  );
+}
+
+function GlobeIconSmall() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-neutral-500"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10A15.3 15.3 0 0112 2z" />
+    </svg>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Keyboard handler factory                                            */
 /* ------------------------------------------------------------------ */
@@ -170,6 +211,9 @@ export default function DashboardPage() {
 
   /* --- Delete URL state --- */
   const [deletingUrlId, setDeletingUrlId] = useState<string | null>(null);
+
+  /* --- Per-URL audit info (for "View Previous Results" per URL row) --- */
+  const [urlAuditInfo, setUrlAuditInfo] = useState<Record<string, UrlAuditInfo>>({});
 
   /* --- Toast --- */
   const [toast, setToast] = useState<ToastState>(INITIAL_TOAST);
@@ -283,16 +327,32 @@ export default function DashboardPage() {
         setExpandedProjectId(null);
         setProjectUrls([]);
         setAddUrlError(null);
+        setUrlAuditInfo({});
         return;
       }
 
       setExpandedProjectId(projectId);
       setIsLoadingDetail(true);
       setAddUrlError(null);
+      setUrlAuditInfo({});
 
       try {
         const detail = await getProject(projectId);
         setProjectUrls(detail.urls);
+
+        // Fetch per-URL audit info in parallel (non-blocking)
+        if (detail.urls.length > 0) {
+          const infoPromises = detail.urls.map(async (u) => {
+            const info = await getLatestAuditForUrl(u.url);
+            return { urlId: u.urlId, info };
+          });
+          const infoResults = await Promise.all(infoPromises);
+          const infoMap: Record<string, UrlAuditInfo> = {};
+          for (const { urlId, info } of infoResults) {
+            infoMap[urlId] = info;
+          }
+          setUrlAuditInfo(infoMap);
+        }
       } catch (err: unknown) {
         const typedErr = err as Error & { status?: number };
         if (typedErr.status === 401) {
@@ -390,13 +450,26 @@ export default function DashboardPage() {
     [router]
   );
 
+  /* --- Navigate to results --- */
+  const handleViewResults = useCallback(
+    (auditId: string | null, url: string) => {
+      if (auditId !== null) {
+        router.push(`/results?id=${encodeURIComponent(auditId)}`);
+      } else {
+        // Fallback: navigate to audit page with URL pre-filled
+        router.push(`/audit?url=${encodeURIComponent(url)}`);
+      }
+    },
+    [router]
+  );
+
   return (
     <MotionWrapper>
       <main
         data-testid="dashboard-page"
         className="min-h-screen p-8 bg-neutral-950 text-neutral-50"
       >
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-6xl">
           <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
 
           {/* Toast notifications */}
@@ -412,8 +485,8 @@ export default function DashboardPage() {
           {/* Loading state — skeleton cards */}
           {pageState === "loading" && (
             <div data-testid="dashboard-loading" role="status" aria-label="Loading projects">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[1, 2, 3].map((i) => (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[1, 2].map((i) => (
                   <div
                     key={i}
                     className="rounded-2xl border border-neutral-800/50 bg-neutral-900/80 p-6"
@@ -456,38 +529,69 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Create project form — visible in empty and success states */}
+          {/* Create project form — pill-shaped inline-edit style */}
           {(pageState === "empty" || pageState === "success") && (
             <div data-testid="create-project-section" className="mb-8">
-              <h2 className="text-lg font-semibold mb-3 text-neutral-200">Create Project</h2>
-              <form
-                onSubmit={handleCreateProject}
-                data-testid="create-project-form"
-                noValidate
-                className="flex flex-col sm:flex-row gap-3"
-              >
-                <div className="flex-1">
-                  <Input
-                    label="Project Name"
+              <form onSubmit={handleCreateProject} data-testid="create-project-form" noValidate>
+                <div className="relative flex items-center rounded-full border-2 border-neutral-700 bg-neutral-900 shadow-sm transition-all focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 hover:border-neutral-600">
+                  <input
                     name="project-name"
                     id="project-name"
-                    placeholder="My Website Audit"
-                    {...(createNameError !== null ? { error: createNameError } : {})}
+                    placeholder="New project name..."
                     disabled={isCreating}
                     data-testid="create-project-input"
                     autoComplete="off"
+                    aria-label="Project Name"
+                    aria-invalid={createNameError !== null ? "true" : undefined}
+                    aria-describedby={createNameError !== null ? "create-project-error" : undefined}
+                    className="h-12 flex-1 rounded-full bg-transparent pl-5 pr-36 text-sm text-neutral-100 placeholder-neutral-500 outline-none disabled:opacity-50"
                   />
-                </div>
-                <div className="self-end">
-                  <Button
+                  <motion.button
                     type="submit"
-                    loading={isCreating}
                     disabled={isCreating}
                     data-testid="create-project-submit"
+                    layout
+                    className="absolute right-1.5 flex items-center justify-center gap-2 overflow-hidden rounded-full bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed"
+                    whileTap={{ scale: 0.97 }}
+                    transition={{ layout: { duration: 0.2, type: "spring", bounce: 0.15 } }}
                   >
-                    Create Project
-                  </Button>
+                    <AnimatePresence mode="wait" initial={false}>
+                      {/* v8 ignore next 11 -- loading animation: transient state, resolves instantly in tests */}
+                      {isCreating ? (
+                        <motion.span
+                          key="creating"
+                          className="flex items-center gap-2"
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          transition={{ duration: 0.15 }}
+                        >
+                          <SpinnerIcon />
+                          Creating...
+                        </motion.span>
+                      ) : (
+                        <motion.span
+                          key="idle"
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          transition={{ duration: 0.15 }}
+                        >
+                          Create Project
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </motion.button>
                 </div>
+                {createNameError !== null && (
+                  <p
+                    id="create-project-error"
+                    className="mt-2 ml-5 text-xs text-red-400"
+                    role="alert"
+                  >
+                    {createNameError}
+                  </p>
+                )}
               </form>
             </div>
           )}
@@ -495,7 +599,7 @@ export default function DashboardPage() {
           {/* Success state — project cards grid */}
           {pageState === "success" && (
             <div data-testid="project-list">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {projects.map((project) => {
                   const isExpanded = expandedProjectId === project.projectId;
                   const health = projectHealth[project.projectId];
@@ -616,62 +720,58 @@ export default function DashboardPage() {
                               </div>
                             )}
 
-                            {/* URLs list */}
+                            {/* URLs section */}
                             {!isLoadingDetail && (
                               <>
-                                <button
-                                  type="button"
-                                  className="flex items-center gap-1 text-sm font-medium text-neutral-300 mb-3"
-                                  /* v8 ignore next -- stopPropagation: prevents card toggle when clicking URLs header */
-                                  onClick={(e) => e.stopPropagation()}
-                                  data-testid="urls-section-header"
-                                >
-                                  <ChevronIcon expanded={true} />
-                                  URLs ({projectUrls.length})
-                                </button>
-
-                                {projectUrls.length === 0 && (
-                                  <p
-                                    data-testid="project-no-urls"
-                                    className="text-sm text-neutral-500 mb-3"
+                                {/* Section header */}
+                                <div className="flex items-center justify-between mb-3">
+                                  <button
+                                    type="button"
+                                    className="flex items-center gap-1 text-sm font-medium text-neutral-300"
+                                    /* v8 ignore next -- stopPropagation: prevents card toggle when clicking URLs header */
+                                    onClick={(e) => e.stopPropagation()}
+                                    data-testid="urls-section-header"
                                   >
-                                    No URLs added yet. Add one below to start auditing.
-                                  </p>
+                                    <ChevronIcon expanded={true} />
+                                    URLs ({projectUrls.length})
+                                  </button>
+                                </div>
+
+                                {/* Empty state — inline prompt */}
+                                {projectUrls.length === 0 && (
+                                  <div
+                                    data-testid="project-no-urls"
+                                    className="rounded-lg border border-dashed border-neutral-700/50 px-4 py-5 text-center mb-3"
+                                  >
+                                    <p className="text-sm text-neutral-400 mb-3">
+                                      Add a URL to start auditing your site.
+                                    </p>
+                                  </div>
                                 )}
 
+                                {/* URL list */}
                                 {projectUrls.length > 0 && (
-                                  <ul data-testid="project-url-list" className="space-y-2 mb-4">
+                                  <ul data-testid="project-url-list" className="space-y-2 mb-3">
                                     {projectUrls.map((urlItem) => (
                                       <li
                                         key={urlItem.urlId}
                                         data-testid={`url-item-${urlItem.urlId}`}
-                                        className="flex items-center justify-between gap-2 rounded-lg bg-neutral-800/30 px-3 py-2.5"
+                                        className="group rounded-lg border border-neutral-800/40 bg-neutral-800/20 px-4 py-3 transition-colors hover:border-neutral-700/50 hover:bg-neutral-800/30"
                                       >
-                                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                                          <LinkIcon />
-                                          <span
-                                            className="text-sm text-neutral-300 truncate"
-                                            title={urlItem.url}
-                                          >
-                                            {urlItem.url}
-                                          </span>
-                                        </div>
-                                        <div className="flex items-center gap-1 shrink-0">
+                                        {/* Row 1: URL + delete */}
+                                        <div className="flex items-center justify-between gap-2 mb-2">
+                                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                            <LinkIcon />
+                                            <span
+                                              className="text-sm text-neutral-200 truncate"
+                                              title={urlItem.url}
+                                            >
+                                              {urlItem.url}
+                                            </span>
+                                          </div>
                                           <button
                                             type="button"
-                                            className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-500"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleRunAudit(urlItem.url);
-                                            }}
-                                            data-testid={`run-audit-${urlItem.urlId}`}
-                                            aria-label={`Run audit for ${urlItem.url}`}
-                                          >
-                                            Run Audit
-                                          </button>
-                                          <button
-                                            type="button"
-                                            className="rounded-md px-2 py-1 text-xs text-neutral-500 transition-colors hover:text-red-400"
+                                            className="rounded p-1 text-neutral-600 opacity-0 transition-all group-hover:opacity-100 hover:bg-neutral-800 hover:text-red-400"
                                             disabled={deletingUrlId === urlItem.urlId}
                                             onClick={(e) => {
                                               e.stopPropagation();
@@ -680,7 +780,56 @@ export default function DashboardPage() {
                                             data-testid={`delete-url-${urlItem.urlId}`}
                                             aria-label={`Delete ${urlItem.url}`}
                                           >
-                                            {deletingUrlId === urlItem.urlId ? "..." : "\u2715"}
+                                            {deletingUrlId === urlItem.urlId ? (
+                                              <span className="text-xs px-0.5">...</span>
+                                            ) : (
+                                              <svg
+                                                width="14"
+                                                height="14"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth={2}
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                aria-hidden="true"
+                                              >
+                                                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                                              </svg>
+                                            )}
+                                          </button>
+                                        </div>
+
+                                        {/* Row 2: Action buttons */}
+                                        <div className="flex items-center gap-2">
+                                          {urlAuditInfo[urlItem.urlId]?.hasAuditData === true && (
+                                            <button
+                                              type="button"
+                                              className="rounded-md px-3 py-1 text-xs font-medium text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-50"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleViewResults(
+                                                  urlAuditInfo[urlItem.urlId]?.auditId ?? null,
+                                                  urlItem.url
+                                                );
+                                              }}
+                                              data-testid={`view-results-${urlItem.urlId}`}
+                                              aria-label={`View results for ${urlItem.url}`}
+                                            >
+                                              View Previous Results
+                                            </button>
+                                          )}
+                                          <button
+                                            type="button"
+                                            className="rounded-md bg-blue-600/10 px-3 py-1 text-xs font-medium text-blue-400 transition-colors hover:bg-blue-600/20 hover:text-blue-300"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleRunAudit(urlItem.url);
+                                            }}
+                                            data-testid={`run-audit-${urlItem.urlId}`}
+                                            aria-label={`Run audit for ${urlItem.url}`}
+                                          >
+                                            Run New Audit
                                           </button>
                                         </div>
                                       </li>
@@ -688,38 +837,82 @@ export default function DashboardPage() {
                                   </ul>
                                 )}
 
-                                {/* Add URL form */}
+                                {/* Add URL — pill-shaped inline-edit style */}
                                 <form
                                   onSubmit={handleAddUrl}
                                   data-testid="add-url-form"
                                   noValidate
-                                  className="flex flex-col sm:flex-row gap-2"
                                   onClick={(e) => e.stopPropagation()}
                                 >
-                                  <div className="flex-1">
-                                    <Input
-                                      label="Add URL"
+                                  <div className="relative flex items-center rounded-full border-2 border-neutral-700/60 bg-neutral-900/80 transition-all focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 hover:border-neutral-600">
+                                    <span className="pointer-events-none pl-3.5">
+                                      <GlobeIconSmall />
+                                    </span>
+                                    <input
                                       name="project-url"
                                       id={`add-url-${project.projectId}`}
                                       placeholder="https://example.com"
-                                      {...(addUrlError !== null ? { error: addUrlError } : {})}
                                       disabled={isAddingUrl}
                                       data-testid="add-url-input"
                                       type="url"
                                       autoComplete="url"
+                                      aria-label="Add URL"
+                                      aria-invalid={addUrlError !== null ? "true" : undefined}
+                                      aria-describedby={
+                                        addUrlError !== null
+                                          ? `add-url-error-${project.projectId}`
+                                          : undefined
+                                      }
+                                      className="h-10 flex-1 bg-transparent pl-2.5 pr-20 text-sm text-neutral-100 placeholder-neutral-500 outline-none disabled:opacity-50"
                                     />
-                                  </div>
-                                  <div className="self-end">
-                                    <Button
+                                    <motion.button
                                       type="submit"
-                                      size="sm"
-                                      loading={isAddingUrl}
                                       disabled={isAddingUrl}
                                       data-testid="add-url-submit"
+                                      layout
+                                      className="absolute right-1 flex items-center justify-center gap-1.5 overflow-hidden rounded-full bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed"
+                                      whileTap={{ scale: 0.97 }}
+                                      transition={{
+                                        layout: { duration: 0.2, type: "spring", bounce: 0.15 },
+                                      }}
                                     >
-                                      Add URL
-                                    </Button>
+                                      <AnimatePresence mode="wait" initial={false}>
+                                        {/* v8 ignore next 11 -- loading animation: transient state, resolves instantly in tests */}
+                                        {isAddingUrl ? (
+                                          <motion.span
+                                            key="adding"
+                                            className="flex items-center gap-1.5"
+                                            initial={{ opacity: 0, y: 8 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: -8 }}
+                                            transition={{ duration: 0.15 }}
+                                          >
+                                            <SpinnerIcon size={14} />
+                                            Adding...
+                                          </motion.span>
+                                        ) : (
+                                          <motion.span
+                                            key="idle"
+                                            initial={{ opacity: 0, y: 8 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: -8 }}
+                                            transition={{ duration: 0.15 }}
+                                          >
+                                            Add URL
+                                          </motion.span>
+                                        )}
+                                      </AnimatePresence>
+                                    </motion.button>
                                   </div>
+                                  {addUrlError !== null && (
+                                    <p
+                                      id={`add-url-error-${project.projectId}`}
+                                      className="mt-2 ml-5 text-xs text-red-400"
+                                      role="alert"
+                                    >
+                                      {addUrlError}
+                                    </p>
+                                  )}
                                 </form>
                               </>
                             )}

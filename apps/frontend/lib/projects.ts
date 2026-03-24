@@ -220,6 +220,7 @@ export interface ProjectHealthData {
   lcpValue: string | null;
   clsValue: string | null;
   tbtValue: string | null;
+  lastAuditId: string | null;
   lastAuditDate: string | null;
   firstUrl: string | null;
 }
@@ -242,9 +243,54 @@ function formatMetricValue(value: number | null, unit: "ms" | "s" | "score"): st
   return value.toFixed(2);
 }
 
+/** Response shape from GET /audits/latest?url=... */
+interface LatestAuditResponse {
+  jobId?: string;
+  auditId?: string;
+  completedAt?: string;
+  metrics?: {
+    lcp: number | null;
+    cls: number | null;
+    tbt: number | null;
+  };
+}
+
+/** Fetch latest audit data for a single URL. Returns null on failure or 404. */
+async function fetchLatestAuditForUrl(url: string): Promise<LatestAuditResponse | null> {
+  const response = await fetch(`${API_BASE}/audits/latest?url=${encodeURIComponent(url)}`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+
+  if (!response.ok) return null;
+
+  const data = (await response.json()) as LatestAuditResponse;
+  if (data.metrics === undefined) return null;
+
+  return data;
+}
+
+/** Build a ProjectHealthData from a LatestAuditResponse. */
+function buildHealthFromResponse(data: LatestAuditResponse, firstUrl: string): ProjectHealthData {
+  const m = data.metrics!;
+  return {
+    lcp: classifyMetric(m.lcp, 2500, 4000),
+    cls: classifyMetric(m.cls, 0.1, 0.25),
+    tbt: classifyMetric(m.tbt, 200, 600),
+    lcpValue: formatMetricValue(m.lcp, "s"),
+    clsValue: formatMetricValue(m.cls, "score"),
+    tbtValue: formatMetricValue(m.tbt, "ms"),
+    lastAuditId: data.jobId ?? data.auditId ?? null,
+    lastAuditDate: data.completedAt ?? null,
+    firstUrl,
+  };
+}
+
 /**
  * Fetch the last audit health data for a project.
- * Strategy: get project URLs → take first URL → GET /audits/latest?url=...
+ * Strategy: get project URLs → try each URL → GET /audits/latest?url=...
+ * Returns the first URL that has completed audit data.
  * Returns unknown health if no URLs or no completed audits.
  */
 export async function getLastAuditForProject(projectId: string): Promise<ProjectHealthData> {
@@ -255,6 +301,7 @@ export async function getLastAuditForProject(projectId: string): Promise<Project
     lcpValue: null,
     clsValue: null,
     tbtValue: null,
+    lastAuditId: null,
     lastAuditDate: null,
     firstUrl: null,
   };
@@ -266,38 +313,46 @@ export async function getLastAuditForProject(projectId: string): Promise<Project
     const firstUrl = detail.urls[0]?.url ?? null;
     if (firstUrl === null) return unknown;
 
-    // GET /audits/latest?url=... — returns the most recent completed audit with metrics
-    const response = await fetch(`${API_BASE}/audits/latest?url=${encodeURIComponent(firstUrl)}`, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-    });
+    // Try all URLs in parallel — return health from the first one with data
+    const results = await Promise.all(
+      detail.urls.map(async (u) => {
+        const data = await fetchLatestAuditForUrl(u.url);
+        return { url: u.url, data };
+      })
+    );
 
-    if (!response.ok) return { ...unknown, firstUrl };
+    for (const result of results) {
+      if (result.data !== null) {
+        return buildHealthFromResponse(result.data, firstUrl);
+      }
+    }
 
-    const data = (await response.json()) as {
-      completedAt?: string;
-      metrics?: {
-        lcp: number | null;
-        cls: number | null;
-        tbt: number | null;
-      };
-    };
-
-    if (data.metrics === undefined) return { ...unknown, firstUrl };
-
-    return {
-      lcp: classifyMetric(data.metrics.lcp, 2500, 4000),
-      cls: classifyMetric(data.metrics.cls, 0.1, 0.25),
-      tbt: classifyMetric(data.metrics.tbt, 200, 600),
-      lcpValue: formatMetricValue(data.metrics.lcp, "s"),
-      clsValue: formatMetricValue(data.metrics.cls, "score"),
-      tbtValue: formatMetricValue(data.metrics.tbt, "ms"),
-      lastAuditDate: data.completedAt ?? null,
-      firstUrl,
-    };
+    return { ...unknown, firstUrl };
   } catch {
     return unknown;
+  }
+}
+
+/** Per-URL audit info for dashboard URL rows. */
+export interface UrlAuditInfo {
+  auditId: string | null;
+  hasAuditData: boolean;
+}
+
+/**
+ * Fetch latest audit info for a single URL.
+ * Used by the dashboard to show "View Previous Results" per URL row.
+ */
+export async function getLatestAuditForUrl(url: string): Promise<UrlAuditInfo> {
+  try {
+    const data = await fetchLatestAuditForUrl(url);
+    if (data === null) return { auditId: null, hasAuditData: false };
+    return {
+      auditId: data.jobId ?? data.auditId ?? null,
+      hasAuditData: true,
+    };
+  } catch {
+    return { auditId: null, hasAuditData: false };
   }
 }
 
