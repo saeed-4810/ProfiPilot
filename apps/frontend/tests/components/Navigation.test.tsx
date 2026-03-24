@@ -38,54 +38,88 @@ beforeEach(() => {
 });
 
 /* ================================================================== */
-/* T-SHELL-004: Authenticated user sees navigation                     */
+/* T-SHELL-004: Authenticated user sees navigation with active state   */
 /* ================================================================== */
 
-describe("T-SHELL-004: Authenticated user sees navigation with active state", () => {
-  it("renders navigation element with aria-label", () => {
+describe("T-SHELL-004: Navigation renders with active state", () => {
+  it("renders navigation wrapper element", () => {
     render(<Navigation />);
 
-    const nav = screen.getByTestId("navigation");
-    expect(nav).toBeInTheDocument();
-    expect(nav).toHaveAttribute("aria-label", "Main navigation");
+    expect(screen.getByTestId("navigation")).toBeInTheDocument();
   });
 
-  it("renders all nav links", () => {
+  it("renders top nav bar with brand", () => {
     render(<Navigation />);
 
-    expect(screen.getByTestId("nav-link-dashboard")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-link-audit")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-link-results")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-link-export")).toBeInTheDocument();
+    const brand = screen.getByTestId("nav-brand");
+    expect(brand).toBeInTheDocument();
+    expect(brand).toHaveTextContent("NIMBLEVITALS");
+    expect(brand).toHaveAttribute("href", "/dashboard");
   });
 
-  it("marks active link with aria-current=page", () => {
-    mockPathname = "/audit";
+  it("renders desktop sidebar with nav items", () => {
     render(<Navigation />);
 
-    expect(screen.getByTestId("nav-link-audit")).toHaveAttribute("aria-current", "page");
-    expect(screen.getByTestId("nav-link-dashboard")).not.toHaveAttribute("aria-current");
+    expect(screen.getByTestId("sidebar")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-nav")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-nav")).toHaveAttribute("aria-label", "Main navigation");
   });
 
-  it("highlights active link with bg-neutral-800 class (not just hover)", () => {
+  it("renders active sidebar items: Overview and Performance", () => {
+    render(<Navigation />);
+
+    const overview = screen.getByTestId("nav-item-overview");
+    const performance = screen.getByTestId("nav-item-performance");
+
+    expect(overview).toBeInTheDocument();
+    expect(performance).toBeInTheDocument();
+    // Overview links to /dashboard
+    expect(overview).toHaveAttribute("href", "/dashboard");
+    // Performance links to /audit
+    expect(performance).toHaveAttribute("href", "/audit");
+  });
+
+  it("marks Overview as active when on /dashboard", () => {
     mockPathname = "/dashboard";
     render(<Navigation />);
 
-    // Active link has bg-neutral-800 as a standalone class (not just hover:bg-neutral-800)
-    const activeClasses = screen.getByTestId("nav-link-dashboard").className.split(" ");
-    const inactiveClasses = screen.getByTestId("nav-link-audit").className.split(" ");
-
-    expect(activeClasses).toContain("bg-neutral-800");
-    expect(inactiveClasses).not.toContain("bg-neutral-800");
+    expect(screen.getByTestId("nav-item-overview")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("nav-item-performance")).not.toHaveAttribute("aria-current");
   });
 
-  it("displays user email", () => {
+  it("marks Performance as active when on /audit", () => {
+    mockPathname = "/audit";
+    render(<Navigation />);
+
+    expect(screen.getByTestId("nav-item-performance")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("nav-item-overview")).not.toHaveAttribute("aria-current");
+  });
+
+  it("renders coming-soon items as non-navigable spans", () => {
+    render(<Navigation />);
+
+    const security = screen.getByTestId("nav-item-security");
+    const accessibility = screen.getByTestId("nav-item-accessibility");
+    const seo = screen.getByTestId("nav-item-seo");
+
+    // Coming-soon items are <span>, not <a> — no href attribute
+    expect(security.tagName).toBe("SPAN");
+    expect(accessibility.tagName).toBe("SPAN");
+    expect(seo.tagName).toBe("SPAN");
+
+    // They have accessible labels
+    expect(security).toHaveAttribute("aria-label", "Security — Coming soon");
+    expect(accessibility).toHaveAttribute("aria-label", "Accessibility — Coming soon");
+    expect(seo).toHaveAttribute("aria-label", "SEO — Coming soon");
+  });
+
+  it("displays user email in top nav", () => {
     render(<Navigation />);
 
     expect(screen.getByTestId("nav-user-email")).toHaveTextContent("test@example.com");
   });
 
-  it("renders sign-out button", () => {
+  it("renders sign-out button in top nav", () => {
     render(<Navigation />);
 
     expect(screen.getByTestId("nav-sign-out")).toBeInTheDocument();
@@ -102,27 +136,99 @@ describe("T-SHELL-004: Authenticated user sees navigation with active state", ()
       expect(mockSignOut).toHaveBeenCalledTimes(1);
     });
   });
+});
 
-  it("renders brand link pointing to /dashboard", () => {
+/* ================================================================== */
+/* Top nav bar links                                                   */
+/* ================================================================== */
+
+describe("Top nav bar links", () => {
+  it("renders top nav links container", () => {
     render(<Navigation />);
 
-    const brand = screen.getByTestId("nav-brand");
-    expect(brand).toHaveTextContent("PrefPilot");
-    expect(brand).toHaveAttribute("href", "/dashboard");
+    expect(screen.getByTestId("nav-top-links")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-top-links")).toHaveAttribute("aria-label", "Top navigation");
   });
 
-  it("applies active state to results link when on /results", () => {
-    mockPathname = "/results";
+  it("renders active top nav links: Dashboard and Audits", () => {
     render(<Navigation />);
 
-    expect(screen.getByTestId("nav-link-results")).toHaveAttribute("aria-current", "page");
+    const dashboard = screen.getByTestId("nav-top-dashboard");
+    const audits = screen.getByTestId("nav-top-audits");
+
+    expect(dashboard).toHaveAttribute("href", "/dashboard");
+    expect(audits).toHaveAttribute("href", "/audit");
   });
 
-  it("applies active state to export link when on /export", () => {
-    mockPathname = "/export";
+  it("renders coming-soon top nav items as non-navigable spans", () => {
     render(<Navigation />);
 
-    expect(screen.getByTestId("nav-link-export")).toHaveAttribute("aria-current", "page");
+    const projects = screen.getByTestId("nav-top-projects");
+    const settings = screen.getByTestId("nav-top-settings");
+
+    expect(projects.tagName).toBe("SPAN");
+    expect(settings.tagName).toBe("SPAN");
+    expect(projects).toHaveAttribute("aria-label", "Projects — Coming soon");
+    expect(settings).toHaveAttribute("aria-label", "Settings — Coming soon");
+  });
+
+  it("marks Dashboard as active in top nav when on /dashboard", () => {
+    mockPathname = "/dashboard";
+    render(<Navigation />);
+
+    expect(screen.getByTestId("nav-top-dashboard")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("marks Audits as active in top nav when on /audit", () => {
+    mockPathname = "/audit";
+    render(<Navigation />);
+
+    expect(screen.getByTestId("nav-top-audits")).toHaveAttribute("aria-current", "page");
+  });
+});
+
+/* ================================================================== */
+/* Sidebar footer: Support + Docs (UX-001 Step 7)                     */
+/* ================================================================== */
+
+describe("Sidebar footer: Support + Docs", () => {
+  it("renders sidebar footer with support and docs links", () => {
+    render(<Navigation />);
+
+    expect(screen.getByTestId("sidebar-footer")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-support-link")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-docs-link")).toBeInTheDocument();
+  });
+
+  it("support link points to mailto", () => {
+    render(<Navigation />);
+
+    expect(screen.getByTestId("sidebar-support-link")).toHaveAttribute(
+      "href",
+      "mailto:support@nimblevitals.app"
+    );
+  });
+
+  it("docs link opens in new tab", () => {
+    render(<Navigation />);
+
+    const docsLink = screen.getByTestId("sidebar-docs-link");
+    expect(docsLink).toHaveAttribute("target", "_blank");
+    expect(docsLink).toHaveAttribute("rel", "noopener noreferrer");
+  });
+});
+
+/* ================================================================== */
+/* Help button (UX-001 Step 7 — top nav support path)                  */
+/* ================================================================== */
+
+describe("Help button in top nav", () => {
+  it("renders help button with accessible label", () => {
+    render(<Navigation />);
+
+    const helpBtn = screen.getByTestId("nav-help-button");
+    expect(helpBtn).toBeInTheDocument();
+    expect(helpBtn).toHaveAttribute("aria-label", "Help");
   });
 });
 
@@ -130,7 +236,7 @@ describe("T-SHELL-004: Authenticated user sees navigation with active state", ()
 /* U-SHELL-003: Navigation responsive on mobile                        */
 /* ================================================================== */
 
-describe("U-SHELL-003: Navigation responsive on mobile (hamburger menu)", () => {
+describe("U-SHELL-003: Navigation responsive on mobile (drawer)", () => {
   it("renders mobile toggle button", () => {
     render(<Navigation />);
 
@@ -140,7 +246,7 @@ describe("U-SHELL-003: Navigation responsive on mobile (hamburger menu)", () => 
     expect(toggle).toHaveAttribute("aria-label", "Open menu");
   });
 
-  it("opens mobile menu when toggle is clicked", async () => {
+  it("opens mobile drawer when toggle is clicked", async () => {
     const user = userEvent.setup();
     render(<Navigation />);
 
@@ -153,7 +259,7 @@ describe("U-SHELL-003: Navigation responsive on mobile (hamburger menu)", () => 
     expect(screen.getByTestId("nav-mobile-toggle")).toHaveAttribute("aria-label", "Close menu");
   });
 
-  it("closes mobile menu when toggle is clicked again", async () => {
+  it("closes mobile drawer when toggle is clicked again", async () => {
     const user = userEvent.setup();
     render(<Navigation />);
 
@@ -164,16 +270,29 @@ describe("U-SHELL-003: Navigation responsive on mobile (hamburger menu)", () => 
     expect(screen.queryByTestId("nav-mobile-menu")).not.toBeInTheDocument();
   });
 
-  it("renders mobile nav links when menu is open", async () => {
+  it("renders mobile nav items when drawer is open", async () => {
     const user = userEvent.setup();
     render(<Navigation />);
 
     await user.click(screen.getByTestId("nav-mobile-toggle"));
 
-    expect(screen.getByTestId("nav-mobile-link-dashboard")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-mobile-link-audit")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-mobile-link-results")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-mobile-link-export")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-mobile-item-overview")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-mobile-item-performance")).toBeInTheDocument();
+  });
+
+  it("renders coming-soon items in mobile drawer as non-navigable", async () => {
+    const user = userEvent.setup();
+    render(<Navigation />);
+
+    await user.click(screen.getByTestId("nav-mobile-toggle"));
+
+    const security = screen.getByTestId("nav-mobile-item-security");
+    const accessibility = screen.getByTestId("nav-mobile-item-accessibility");
+    const seo = screen.getByTestId("nav-mobile-item-seo");
+
+    expect(security.tagName).toBe("SPAN");
+    expect(accessibility.tagName).toBe("SPAN");
+    expect(seo.tagName).toBe("SPAN");
   });
 
   it("marks active mobile link with aria-current=page", async () => {
@@ -183,25 +302,28 @@ describe("U-SHELL-003: Navigation responsive on mobile (hamburger menu)", () => 
 
     await user.click(screen.getByTestId("nav-mobile-toggle"));
 
-    expect(screen.getByTestId("nav-mobile-link-audit")).toHaveAttribute("aria-current", "page");
-    expect(screen.getByTestId("nav-mobile-link-dashboard")).not.toHaveAttribute("aria-current");
+    expect(screen.getByTestId("nav-mobile-item-performance")).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(screen.getByTestId("nav-mobile-item-overview")).not.toHaveAttribute("aria-current");
   });
 
-  it("closes mobile menu when a link is clicked", async () => {
+  it("closes mobile drawer when a link is clicked", async () => {
     const user = userEvent.setup();
     render(<Navigation />);
 
     await user.click(screen.getByTestId("nav-mobile-toggle"));
     expect(screen.getByTestId("nav-mobile-menu")).toBeInTheDocument();
 
-    await user.click(screen.getByTestId("nav-mobile-link-audit"));
+    await user.click(screen.getByTestId("nav-mobile-item-overview"));
 
     await waitFor(() => {
       expect(screen.queryByTestId("nav-mobile-menu")).not.toBeInTheDocument();
     });
   });
 
-  it("displays user email in mobile menu", async () => {
+  it("displays user email in mobile drawer", async () => {
     const user = userEvent.setup();
     render(<Navigation />);
 
@@ -219,7 +341,7 @@ describe("U-SHELL-003: Navigation responsive on mobile (hamburger menu)", () => 
     expect(screen.getByTestId("nav-mobile-sign-out")).toBeInTheDocument();
   });
 
-  it("calls signOut and closes menu when mobile sign-out is clicked", async () => {
+  it("calls signOut and closes drawer when mobile sign-out is clicked", async () => {
     const user = userEvent.setup();
     render(<Navigation />);
 
@@ -228,6 +350,30 @@ describe("U-SHELL-003: Navigation responsive on mobile (hamburger menu)", () => 
 
     await waitFor(() => {
       expect(mockSignOut).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("nav-mobile-menu")).not.toBeInTheDocument();
+    });
+  });
+
+  it("renders support and docs links in mobile drawer", async () => {
+    const user = userEvent.setup();
+    render(<Navigation />);
+
+    await user.click(screen.getByTestId("nav-mobile-toggle"));
+
+    expect(screen.getByTestId("mobile-support-link")).toBeInTheDocument();
+    expect(screen.getByTestId("mobile-docs-link")).toBeInTheDocument();
+  });
+
+  it("closes drawer when backdrop is clicked", async () => {
+    const user = userEvent.setup();
+    render(<Navigation />);
+
+    await user.click(screen.getByTestId("nav-mobile-toggle"));
+    expect(screen.getByTestId("nav-mobile-menu")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("mobile-backdrop"));
+
+    await waitFor(() => {
       expect(screen.queryByTestId("nav-mobile-menu")).not.toBeInTheDocument();
     });
   });

@@ -4,6 +4,9 @@ const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./hooks/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-manrope)", "var(--font-inter)", "system-ui", "sans-serif"],
+      },
       keyframes: {
         shimmer: {
           "0%": { backgroundPosition: "-200% 0" },
