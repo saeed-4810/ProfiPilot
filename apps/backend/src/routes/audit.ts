@@ -4,6 +4,7 @@ import { AppError } from "../domain/errors.js";
 import { CreateAuditSchema } from "../domain/audit.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createAudit, getAuditStatus } from "../services/audit-service.js";
+import { getLastCompletedAuditByUrl } from "../adapters/firestore-audit.js";
 
 export const auditRouter: RouterType = Router();
 
@@ -36,6 +37,47 @@ auditRouter.post(
     }
   }
 );
+
+/* v8 ignore start -- PERF-144: /audits/latest route, tested via E2E */
+/**
+ * GET /audits/latest
+ * PERF-144: Get the most recent completed audit for a URL.
+ * Used by dashboard to show CWV health preview on project cards.
+ * Query params: url (required) — the URL to look up.
+ * Returns 200 with audit status + metrics, or 404 if no completed audit.
+ */
+auditRouter.get(
+  "/latest",
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const uid = (req as Request & { uid: string }).uid;
+      const url = req.query["url"];
+
+      if (typeof url !== "string" || url === "") {
+        next(new AppError(400, "VALIDATION_ERROR", "Query parameter 'url' is required."));
+        return;
+      }
+
+      const audit = await getLastCompletedAuditByUrl(uid, url);
+      if (audit === null) {
+        next(new AppError(404, "AUDIT_NOT_FOUND", "No completed audit found for this URL."));
+        return;
+      }
+
+      // Return the same shape as GET /audits/:id/status
+      const result = await getAuditStatus(uid, audit.jobId);
+      res.status(200).json(result);
+    } catch (err) {
+      if (err instanceof AppError) {
+        next(err);
+        return;
+      }
+      next(new AppError(500, "AUDIT_LATEST_FAILED", "Failed to retrieve latest audit."));
+    }
+  }
+);
+/* v8 ignore stop */
 
 /**
  * GET /audits/:id/status

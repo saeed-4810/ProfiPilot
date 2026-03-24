@@ -15,12 +15,16 @@ const mockCreateProject = vi.fn();
 const mockGetProject = vi.fn();
 const mockAddUrlToProject = vi.fn();
 const mockDeleteUrl = vi.fn();
+const mockGetLastAuditForProject = vi.fn();
+const mockGetLatestAuditForUrl = vi.fn();
 vi.mock("@/lib/projects", () => ({
   listProjects: (...args: unknown[]) => mockListProjects(...args),
   createProject: (...args: unknown[]) => mockCreateProject(...args),
   getProject: (...args: unknown[]) => mockGetProject(...args),
   addUrlToProject: (...args: unknown[]) => mockAddUrlToProject(...args),
   deleteUrl: (...args: unknown[]) => mockDeleteUrl(...args),
+  getLastAuditForProject: (...args: unknown[]) => mockGetLastAuditForProject(...args),
+  getLatestAuditForUrl: (...args: unknown[]) => mockGetLatestAuditForUrl(...args),
   COPY_DASHBOARD_EMPTY: "Create your first project to start auditing your web performance.",
   COPY_URL_VALIDATION_ERROR: "Please enter a valid URL including https://",
   COPY_PROJECT_NAME_REQUIRED: "Project name is required.",
@@ -37,6 +41,20 @@ import DashboardPage from "../../app/(authenticated)/dashboard/page";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: health data returns unknown (no audits)
+  mockGetLastAuditForProject.mockResolvedValue({
+    lcp: "unknown",
+    cls: "unknown",
+    tbt: "unknown",
+    lcpValue: null,
+    clsValue: null,
+    tbtValue: null,
+    lastAuditId: null,
+    lastAuditDate: null,
+    firstUrl: null,
+  });
+  // Default: per-URL audit info returns no data
+  mockGetLatestAuditForUrl.mockResolvedValue({ auditId: null, hasAuditData: false });
 });
 
 afterEach(() => {
@@ -677,6 +695,81 @@ describe("T-PERF-125-005: Unauthenticated request returns 401 → redirect to /l
 });
 
 /* ================================================================== */
+/* P-PERF-144-001: Project cards show HealthDots component             */
+/* ================================================================== */
+
+describe("P-PERF-144-001: Project cards show HealthDots and audit status", () => {
+  it("renders HealthDots with 'No audits yet' text on project cards", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "Test Site" })])
+    );
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-proj-1")).toBeInTheDocument();
+      // HealthDots shows "No audits yet" since all statuses are unknown
+      const card = screen.getByTestId("project-card-proj-1");
+      expect(card).toHaveTextContent("No audits yet");
+    });
+  });
+
+  it("renders 'Run first audit' link on project cards", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "Test Site" })])
+    );
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("run-first-audit-proj-1")).toBeInTheDocument();
+      expect(screen.getByTestId("run-first-audit-proj-1")).toHaveTextContent("Run first audit");
+    });
+  });
+
+  it("navigates to /audit when 'Run first audit' is clicked", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "Test Site" })])
+    );
+
+    const user = userEvent.setup();
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("run-first-audit-proj-1")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("run-first-audit-proj-1"));
+
+    expect(mockPush).toHaveBeenCalledWith("/audit");
+  });
+
+  it("shows audit status section with data-testid", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "Test Site" })])
+    );
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-audit-status-proj-1")).toBeInTheDocument();
+    });
+  });
+
+  it("renders health-dots testid on project cards", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "Test Site" })])
+    );
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("health-dots")).toBeInTheDocument();
+    });
+  });
+});
+
+/* ================================================================== */
 /* E-DASH-001: Dashboard page renders (covered by unit tests)          */
 /* ================================================================== */
 
@@ -829,9 +922,7 @@ describe("Project detail toggle", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("project-no-urls")).toBeInTheDocument();
-      expect(
-        screen.getByText("No URLs added yet. Add one below to start auditing.")
-      ).toBeInTheDocument();
+      expect(screen.getByText("Add a URL to start auditing your site.")).toBeInTheDocument();
     });
   });
 
@@ -1212,5 +1303,212 @@ describe("Toast dismiss", () => {
     await waitFor(() => {
       expect(screen.queryByText("Project created successfully.")).not.toBeInTheDocument();
     });
+  });
+});
+
+/* ================================================================== */
+/* Additional: Keyboard navigation on project cards                    */
+/* ================================================================== */
+
+describe("Keyboard navigation on project cards", () => {
+  it("toggles project detail when Enter is pressed on a card", async () => {
+    mockListProjects.mockResolvedValue(makeProjectList([makeProject()]));
+    mockGetProject.mockResolvedValue(makeProjectDetail([]));
+
+    const user = userEvent.setup();
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-proj-1")).toBeInTheDocument();
+    });
+
+    // Focus the card and press Enter
+    screen.getByTestId("project-card-proj-1").focus();
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-detail-proj-1")).toBeInTheDocument();
+    });
+  });
+
+  it("toggles project detail when Space is pressed on a card", async () => {
+    mockListProjects.mockResolvedValue(makeProjectList([makeProject()]));
+    mockGetProject.mockResolvedValue(makeProjectDetail([]));
+
+    const user = userEvent.setup();
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-proj-1")).toBeInTheDocument();
+    });
+
+    // Focus the card and press Space
+    screen.getByTestId("project-card-proj-1").focus();
+    await user.keyboard(" ");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-detail-proj-1")).toBeInTheDocument();
+    });
+  });
+});
+
+/* ================================================================== */
+/* Additional: Project card shows firstUrl subtitle                    */
+/* ================================================================== */
+
+describe("Project card firstUrl subtitle", () => {
+  it("shows firstUrl as subtitle when health data has a URL", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "Test Site" })])
+    );
+    mockGetLastAuditForProject.mockResolvedValue({
+      lcp: "unknown",
+      cls: "unknown",
+      tbt: "unknown",
+      lcpValue: null,
+      clsValue: null,
+      tbtValue: null,
+      lastAuditId: null,
+      lastAuditDate: null,
+      firstUrl: "https://www.example.com",
+    });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("https://www.example.com")).toBeInTheDocument();
+    });
+  });
+});
+
+/* ================================================================== */
+/* Additional: Project card shows metric values from health data       */
+/* ================================================================== */
+
+describe("Project card metric values", () => {
+  it("passes metric values to HealthDots when health data has values", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "Test Site" })])
+    );
+    mockGetLastAuditForProject.mockResolvedValue({
+      lcp: "good",
+      cls: "good",
+      tbt: "good",
+      lcpValue: "2.1s",
+      clsValue: "0.05",
+      tbtValue: "150ms",
+      lastAuditId: "audit-123",
+      lastAuditDate: "2026-03-24T00:00:00Z",
+      firstUrl: "https://www.example.com",
+    });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("2.1s")).toBeInTheDocument();
+      expect(screen.getByText("0.05")).toBeInTheDocument();
+      expect(screen.getByText("150ms")).toBeInTheDocument();
+    });
+  });
+});
+
+/* ================================================================== */
+/* Additional: View Results navigates to /results?id=<auditId>         */
+/* ================================================================== */
+
+describe("View Results per URL navigates to /results", () => {
+  it("shows View Previous Results button when URL has audit data", async () => {
+    mockListProjects.mockResolvedValue(makeProjectList([makeProject()]));
+    mockGetProject.mockResolvedValue(
+      makeProjectDetail([{ urlId: "url-1", url: "https://www.example.com" }])
+    );
+    mockGetLatestAuditForUrl.mockResolvedValue({ auditId: "audit-123", hasAuditData: true });
+
+    const user = userEvent.setup();
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-proj-1")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("project-card-proj-1"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("view-results-url-1")).toBeInTheDocument();
+      expect(screen.getByTestId("view-results-url-1")).toHaveTextContent("View Previous Results");
+    });
+  });
+
+  it("navigates to /results with audit ID when View Previous Results is clicked", async () => {
+    mockListProjects.mockResolvedValue(makeProjectList([makeProject()]));
+    mockGetProject.mockResolvedValue(
+      makeProjectDetail([{ urlId: "url-1", url: "https://www.example.com" }])
+    );
+    mockGetLatestAuditForUrl.mockResolvedValue({ auditId: "audit-123", hasAuditData: true });
+
+    const user = userEvent.setup();
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-proj-1")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("project-card-proj-1"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("view-results-url-1")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("view-results-url-1"));
+
+    expect(mockPush).toHaveBeenCalledWith("/results?id=audit-123");
+  });
+
+  it("does not show View Previous Results button when URL has no audit data", async () => {
+    mockListProjects.mockResolvedValue(makeProjectList([makeProject()]));
+    mockGetProject.mockResolvedValue(
+      makeProjectDetail([{ urlId: "url-1", url: "https://example.com" }])
+    );
+    mockGetLatestAuditForUrl.mockResolvedValue({ auditId: null, hasAuditData: false });
+
+    const user = userEvent.setup();
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-proj-1")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("project-card-proj-1"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("url-item-url-1")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId("view-results-url-1")).not.toBeInTheDocument();
+  });
+
+  it("falls back to /audit?url= when URL has audit data but no auditId", async () => {
+    mockListProjects.mockResolvedValue(makeProjectList([makeProject()]));
+    mockGetProject.mockResolvedValue(
+      makeProjectDetail([{ urlId: "url-1", url: "https://www.example.com" }])
+    );
+    mockGetLatestAuditForUrl.mockResolvedValue({ auditId: null, hasAuditData: true });
+
+    const user = userEvent.setup();
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-proj-1")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("project-card-proj-1"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("view-results-url-1")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("view-results-url-1"));
+
+    expect(mockPush).toHaveBeenCalledWith("/audit?url=https%3A%2F%2Fwww.example.com");
   });
 });

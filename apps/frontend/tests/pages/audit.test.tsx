@@ -5,8 +5,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // --- Mocks ---
 
 const mockPush = vi.fn();
+let mockSearchParamsUrl: string | null = null;
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
+  useSearchParams: () => ({
+    get: (key: string) => (key === "url" ? mockSearchParamsUrl : null),
+  }),
 }));
 
 const mockCreateAudit = vi.fn();
