@@ -8,6 +8,7 @@ import { MotionWrapper } from "@/components/MotionWrapper";
 import { trackPageView } from "@/lib/analytics";
 import { HealthDots } from "@/components/ui/HealthDots";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { ProjectCardSkeleton } from "@/components/ui/ProjectCardSkeleton";
 import { Button } from "@/components/ui/Button";
 import { Toast } from "@/components/ui/Toast";
 import {
@@ -482,19 +483,12 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* Loading state — skeleton cards */}
+          {/* Loading state — contextual project card skeletons (PERF-160) */}
           {pageState === "loading" && (
             <div data-testid="dashboard-loading" role="status" aria-label="Loading projects">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="rounded-2xl border border-neutral-800/50 bg-neutral-900/80 p-6"
-                  >
-                    <Skeleton width="60%" height="24px" variant="text" className="mb-3" />
-                    <Skeleton width="40%" height="16px" variant="text" className="mb-2" />
-                    <Skeleton width="80%" height="16px" variant="text" />
-                  </div>
+                {[0, 1].map((i) => (
+                  <ProjectCardSkeleton key={i} />
                 ))}
               </div>
             </div>

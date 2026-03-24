@@ -8,6 +8,8 @@ import { trackPageView, trackResultsView } from "@/lib/analytics";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { MetricCardSkeleton } from "@/components/ui/MetricCardSkeleton";
+import { ResultsListSkeleton } from "@/components/ui/ResultsListSkeleton";
 import { Button } from "@/components/ui/Button";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { getAuditStatus, type AuditMetrics } from "@/lib/audit";
@@ -296,29 +298,32 @@ export default function ResultsPage() {
         <div className="mx-auto max-w-5xl">
           <h1 className="text-3xl font-bold mb-6">Results</h1>
 
-          {/* Loading state — skeleton cards */}
+          {/* Loading state — contextual skeleton cards (PERF-160) */}
           {pageState === "loading" && (
             <div data-testid="results-loading" role="status" aria-label="Loading results">
-              {/* Summary skeleton */}
-              <div className="mb-8">
-                <Skeleton width="40%" height="28px" variant="text" className="mb-4" />
+              {/* CWV metric card skeletons — matches MetricCard shape */}
+              <section className="mb-8">
+                <Skeleton width="160px" height="24px" variant="text" className="mb-4" />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[0, 1, 2, 3].map((i) => (
+                    <MetricCardSkeleton key={i} />
+                  ))}
+                </div>
+              </section>
+
+              {/* Executive summary skeleton */}
+              <section className="mb-8">
+                <Skeleton width="200px" height="24px" variant="text" className="mb-4" />
                 <Skeleton width="100%" height="16px" variant="text" className="mb-2" />
                 <Skeleton width="90%" height="16px" variant="text" className="mb-2" />
                 <Skeleton width="70%" height="16px" variant="text" />
-              </div>
-              {/* Recommendation card skeletons */}
-              <div className="space-y-4">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
-                    <div className="flex items-center gap-3 mb-3">
-                      <Skeleton width="48px" height="22px" variant="text" />
-                      <Skeleton width="60%" height="20px" variant="text" />
-                    </div>
-                    <Skeleton width="80%" height="16px" variant="text" className="mb-2" />
-                    <Skeleton width="50%" height="16px" variant="text" />
-                  </div>
-                ))}
-              </div>
+              </section>
+
+              {/* Recommendation list skeleton — matches recommendation card shape */}
+              <section>
+                <Skeleton width="180px" height="24px" variant="text" className="mb-4" />
+                <ResultsListSkeleton count={3} />
+              </section>
             </div>
           )}
 
