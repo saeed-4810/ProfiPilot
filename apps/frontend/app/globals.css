@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Stitch design: Manrope light (300) as base body weight */
+body {
+  font-weight: 300;
+}
+
+/* Material Symbols: thin weight matching Stitch design */
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 200, "GRAD" 0, "opsz" 24;
+}
+
 /* Override browser autofill white background for dark theme inputs */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,

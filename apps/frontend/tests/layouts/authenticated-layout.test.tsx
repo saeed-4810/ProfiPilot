@@ -239,7 +239,7 @@ describe("Navigation rendered on authenticated pages", () => {
     });
   });
 
-  it("renders main content area with correct id", async () => {
+  it("renders main content area with correct id and sidebar offset", async () => {
     render(
       <AuthenticatedLayout>
         <p>Content</p>
