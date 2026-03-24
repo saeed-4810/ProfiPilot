@@ -13,6 +13,7 @@ import { ResultsListSkeleton } from "@/components/ui/ResultsListSkeleton";
 import { Button } from "@/components/ui/Button";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { getAuditStatus, type AuditMetrics } from "@/lib/audit";
+import { SourceRef } from "@/components/ui/SourceRef";
 import {
   getRecommendations,
   getSummary,
@@ -23,6 +24,8 @@ import {
   normalizeTicket,
   extractMetrics,
   extractMetricsFromAudit,
+  parseSourceRefs,
+  buildMetricLookup,
   COPY_RESULTS_LOAD_FAILED,
   COPY_AI_UNAVAILABLE,
   COPY_AUDIT_NOT_FOUND,
@@ -284,6 +287,9 @@ export default function ResultsPage() {
   const aiAvailable = summary?.aiAvailable === true;
   const executiveSummary = summary?.executiveSummary ?? null;
 
+  /* --- Metric lookup for source references (PERF-148) --- */
+  const metricLookup = buildMetricLookup(recommendations);
+
   /* --- Derived metric cards for PERF-143 --- */
   // Primary: build from raw audit metrics (always available when completed)
   // Fallback: build from recommendations (when metrics are unavailable)
@@ -441,14 +447,20 @@ export default function ResultsPage() {
                 </section>
               )}
 
-              {/* Executive summary section */}
+              {/* Executive summary section — with inline source refs (PERF-148) */}
               {executiveSummary !== null && executiveSummary !== "" && (
                 <section data-testid="executive-summary" className="mb-8">
                   <h2 className="text-xl font-semibold mb-4 text-neutral-200">Executive Summary</h2>
                   <div className="prose prose-invert max-w-none">
-                    {executiveSummary.split("\n\n").map((paragraph, idx) => (
-                      <p key={idx} className="text-neutral-300 text-sm leading-relaxed mb-3">
-                        {paragraph}
+                    {executiveSummary.split("\n\n").map((paragraph, pIdx) => (
+                      <p key={pIdx} className="text-neutral-300 text-sm leading-relaxed mb-3">
+                        {parseSourceRefs(paragraph, metricLookup).map((segment, sIdx) =>
+                          typeof segment === "string" ? (
+                            <span key={sIdx}>{segment}</span>
+                          ) : (
+                            <SourceRef key={sIdx} {...segment} />
+                          )
+                        )}
                       </p>
                     ))}
                   </div>

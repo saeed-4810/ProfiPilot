@@ -451,6 +451,128 @@ export function extractMetricsFromAudit(metrics: AuditMetrics | undefined): Metr
   return result;
 }
 
+/* ------------------------------------------------------------------ */
+/* Source reference parsing — PERF-148                                 */
+/* ------------------------------------------------------------------ */
+
+/** Data for a single inline source reference in an AI summary. */
+export interface SourceRefData {
+  /** Metric key, e.g. "LCP", "CLS", "TBT". */
+  metric: string;
+  /** Formatted display value from the AI text, e.g. "3.2s", "0.05". */
+  value: string;
+  /** Full metric name, e.g. "Largest Contentful Paint". */
+  fullName: string;
+  /** CWV threshold for this metric, e.g. "2.5s". */
+  threshold: string;
+  /** Rating bucket, e.g. "Poor", "Good". */
+  rating: string;
+  /** Delta from threshold, e.g. "+0.7s". */
+  delta: string;
+}
+
+/** A segment of parsed summary text — either plain text or a source reference. */
+export type SummarySegment = string | SourceRefData;
+
+/** Metric lookup map: metric key (uppercase) → enrichment data. */
+export interface MetricLookup {
+  fullName: string;
+  threshold: string;
+  rating: string;
+  delta: string;
+}
+
+/** Regex matching [METRIC: value] patterns in AI summary text. */
+const SOURCE_REF_REGEX = /\[(\w+):\s*([^\]]+)\]/g;
+
+/**
+ * Parse an AI summary paragraph into segments of plain text and source references.
+ *
+ * Matches `[LCP: 3.2s]`, `[CLS: 0.05]`, `[TBT: 150ms]` etc.
+ * Enriches each match with full name, threshold, rating, and delta from the lookup map.
+ * Text without `[...]` patterns passes through unchanged.
+ */
+export function parseSourceRefs(
+  text: string,
+  lookup: Record<string, MetricLookup>
+): SummarySegment[] {
+  const segments: SummarySegment[] = [];
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(SOURCE_REF_REGEX)) {
+    const matchIndex = match.index;
+    const fullMatch = match[0];
+    /* v8 ignore next 2 -- defensive nullish coalescing: regex capture groups always present for valid matches */
+    const metric = match[1] ?? "";
+    const value = match[2]?.trim() ?? "";
+
+    // Add preceding plain text
+    if (matchIndex > lastIndex) {
+      segments.push(text.slice(lastIndex, matchIndex));
+    }
+
+    // Look up enrichment data
+    const info = lookup[metric.toUpperCase()];
+
+    if (info !== undefined) {
+      segments.push({
+        metric: metric.toUpperCase(),
+        value,
+        fullName: info.fullName,
+        threshold: info.threshold,
+        rating: info.rating,
+        delta: info.delta,
+      });
+    } else {
+      // No lookup data — render as plain reference without expand
+      segments.push({
+        metric: metric.toUpperCase(),
+        value,
+        fullName: metric.toUpperCase(),
+        threshold: "",
+        rating: "",
+        delta: "",
+      });
+    }
+
+    lastIndex = matchIndex + fullMatch.length;
+  }
+
+  // Add trailing plain text
+  if (lastIndex < text.length) {
+    segments.push(text.slice(lastIndex));
+  }
+
+  // No refs found — return original text as single segment
+  if (segments.length === 0) {
+    segments.push(text);
+  }
+
+  return segments;
+}
+
+/**
+ * Build a MetricLookup map from recommendations.
+ * Used to enrich source references with threshold/rating/delta data.
+ */
+export function buildMetricLookup(recs: readonly Recommendation[]): Record<string, MetricLookup> {
+  const lookup: Record<string, MetricLookup> = {};
+
+  for (const rec of recs) {
+    const key = rec.metric.toUpperCase();
+    if (lookup[key] !== undefined) continue; // first occurrence wins (highest severity)
+
+    lookup[key] = {
+      fullName: METRIC_DESCRIPTIONS[rec.metric.toLowerCase()] ?? rec.metric,
+      threshold: rec.targetValue,
+      rating: rec.severity === "P0" ? "Poor" : rec.severity === "P1" ? "Needs Improvement" : "Good",
+      delta: rec.evidence.delta,
+    };
+  }
+
+  return lookup;
+}
+
 const SEVERITY_TO_RATING: Record<Severity, MetricRating> = {
   P0: "poor",
   P1: "needs-improvement",

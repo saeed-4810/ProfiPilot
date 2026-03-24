@@ -8,6 +8,8 @@ import {
   formatEvidence,
   isDevTicket,
   normalizeTicket,
+  parseSourceRefs,
+  buildMetricLookup,
   COPY_RESULTS_LOAD_FAILED,
   COPY_AI_UNAVAILABLE,
   COPY_AUDIT_NOT_FOUND,
@@ -17,6 +19,8 @@ import {
   type Severity,
   type DevTicket,
   type RuleEngineTicket,
+  type MetricLookup,
+  type Recommendation,
 } from "../../lib/results";
 
 // --- Global fetch mock ---
@@ -437,5 +441,185 @@ describe("normalizeTicket", () => {
     const normalized = normalizeTicket(ticket);
     expect(normalized.currentValue).toBe("0.25");
     expect(normalized.targetValue).toBe("threshold: 0.1");
+  });
+});
+
+/* ================================================================== */
+/* parseSourceRefs — PERF-148                                          */
+/* ================================================================== */
+
+describe("parseSourceRefs", () => {
+  const lookup: Record<string, MetricLookup> = {
+    LCP: {
+      fullName: "Largest Contentful Paint",
+      threshold: "2.5s",
+      rating: "Poor",
+      delta: "+0.7s",
+    },
+    CLS: { fullName: "Cumulative Layout Shift", threshold: "0.1", rating: "Good", delta: "-0.05" },
+  };
+
+  it("returns original text as single segment when no refs present", () => {
+    const result = parseSourceRefs("No metrics here.", lookup);
+    expect(result).toEqual(["No metrics here."]);
+  });
+
+  it("parses a single [METRIC: value] reference", () => {
+    const result = parseSourceRefs("Your [LCP: 3.2s] is slow.", lookup);
+    expect(result).toHaveLength(3);
+    expect(result[0]).toBe("Your ");
+    expect(result[2]).toBe(" is slow.");
+
+    const ref = result[1];
+    expect(typeof ref).toBe("object");
+    if (typeof ref === "object") {
+      expect(ref.metric).toBe("LCP");
+      expect(ref.value).toBe("3.2s");
+      expect(ref.fullName).toBe("Largest Contentful Paint");
+      expect(ref.threshold).toBe("2.5s");
+      expect(ref.rating).toBe("Poor");
+      expect(ref.delta).toBe("+0.7s");
+    }
+  });
+
+  it("parses multiple references in one string", () => {
+    const result = parseSourceRefs("[LCP: 3.2s] and [CLS: 0.05] are key.", lookup);
+    expect(result).toHaveLength(4);
+    expect(typeof result[0]).toBe("object"); // LCP ref
+    expect(result[1]).toBe(" and ");
+    expect(typeof result[2]).toBe("object"); // CLS ref
+    expect(result[3]).toBe(" are key.");
+  });
+
+  it("handles unknown metric with fallback data", () => {
+    const result = parseSourceRefs("Check [TBT: 150ms] now.", lookup);
+    const ref = result[1];
+    expect(typeof ref).toBe("object");
+    if (typeof ref === "object") {
+      expect(ref.metric).toBe("TBT");
+      expect(ref.value).toBe("150ms");
+      expect(ref.fullName).toBe("TBT");
+      expect(ref.threshold).toBe("");
+      expect(ref.rating).toBe("");
+      expect(ref.delta).toBe("");
+    }
+  });
+
+  it("handles ref at start of string", () => {
+    const result = parseSourceRefs("[LCP: 3.2s] is slow.", lookup);
+    expect(result).toHaveLength(2);
+    expect(typeof result[0]).toBe("object");
+    expect(result[1]).toBe(" is slow.");
+  });
+
+  it("handles ref at end of string", () => {
+    const result = parseSourceRefs("Check [LCP: 3.2s]", lookup);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toBe("Check ");
+    expect(typeof result[1]).toBe("object");
+  });
+
+  it("handles empty string", () => {
+    const result = parseSourceRefs("", lookup);
+    expect(result).toEqual([""]);
+  });
+
+  it("handles ref with spaces in value", () => {
+    const result = parseSourceRefs("[LCP: 3.2 s]", lookup);
+    const ref = result[0];
+    expect(typeof ref).toBe("object");
+    if (typeof ref === "object") {
+      expect(ref.value).toBe("3.2 s");
+    }
+  });
+
+  it("is case-insensitive on metric key lookup", () => {
+    const result = parseSourceRefs("[lcp: 3.2s]", lookup);
+    const ref = result[0];
+    expect(typeof ref).toBe("object");
+    if (typeof ref === "object") {
+      expect(ref.metric).toBe("LCP");
+      expect(ref.fullName).toBe("Largest Contentful Paint");
+    }
+  });
+});
+
+/* ================================================================== */
+/* buildMetricLookup — PERF-148                                        */
+/* ================================================================== */
+
+describe("buildMetricLookup", () => {
+  const makeRec = (overrides: Partial<Recommendation> = {}): Recommendation => ({
+    ruleId: "rule-1",
+    metric: "LCP",
+    severity: "P0",
+    category: "performance",
+    currentValue: "3.2s",
+    targetValue: "2.5s",
+    suggestedFix: "Optimize images.",
+    evidence: { threshold: 2500, actual: 3200, delta: "+0.7s" },
+    ...overrides,
+  });
+
+  it("builds lookup from recommendations", () => {
+    const recs = [makeRec()];
+    const lookup = buildMetricLookup(recs);
+    expect(lookup["LCP"]).toEqual({
+      fullName: "Largest Contentful Paint",
+      threshold: "2.5s",
+      rating: "Poor",
+      delta: "+0.7s",
+    });
+  });
+
+  it("uses first occurrence for duplicate metrics (highest severity)", () => {
+    const recs = [
+      makeRec({ severity: "P0", targetValue: "2.5s" }),
+      makeRec({ severity: "P2", targetValue: "4.0s" }),
+    ];
+    const lookup = buildMetricLookup(recs);
+    expect(lookup["LCP"]?.threshold).toBe("2.5s");
+  });
+
+  it("maps P0 to Poor rating", () => {
+    const lookup = buildMetricLookup([makeRec({ severity: "P0" })]);
+    expect(lookup["LCP"]?.rating).toBe("Poor");
+  });
+
+  it("maps P1 to Needs Improvement rating", () => {
+    const lookup = buildMetricLookup([makeRec({ severity: "P1" })]);
+    expect(lookup["LCP"]?.rating).toBe("Needs Improvement");
+  });
+
+  it("maps P2 to Good rating", () => {
+    const lookup = buildMetricLookup([makeRec({ severity: "P2" })]);
+    expect(lookup["LCP"]?.rating).toBe("Good");
+  });
+
+  it("maps P3 to Good rating", () => {
+    const lookup = buildMetricLookup([makeRec({ severity: "P3" })]);
+    expect(lookup["LCP"]?.rating).toBe("Good");
+  });
+
+  it("returns empty lookup for empty recommendations", () => {
+    const lookup = buildMetricLookup([]);
+    expect(Object.keys(lookup)).toHaveLength(0);
+  });
+
+  it("handles multiple different metrics", () => {
+    const recs = [
+      makeRec({ metric: "LCP", severity: "P0" }),
+      makeRec({
+        metric: "CLS",
+        severity: "P1",
+        ruleId: "rule-2",
+        targetValue: "0.1",
+        evidence: { threshold: 0.1, actual: 0.15, delta: "+0.05" },
+      }),
+    ];
+    const lookup = buildMetricLookup(recs);
+    expect(Object.keys(lookup)).toHaveLength(2);
+    expect(lookup["LCP"]).toBeDefined();
+    expect(lookup["CLS"]).toBeDefined();
   });
 });
