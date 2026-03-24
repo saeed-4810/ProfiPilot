@@ -58,12 +58,19 @@ describe("Skeleton component", () => {
   });
 
   /* ---------------------------------------------------------------- */
-  /* Animation                                                         */
+  /* Shimmer animation                                                 */
   /* ---------------------------------------------------------------- */
 
-  it("has animate-pulse class for shimmer effect", () => {
+  it("has animate-shimmer class for shimmer effect", () => {
     render(<Skeleton />);
-    expect(screen.getByRole("status").className).toContain("animate-pulse");
+    expect(screen.getByRole("status").className).toContain("animate-shimmer");
+  });
+
+  it("has shimmer gradient background classes", () => {
+    render(<Skeleton />);
+    const cls = screen.getByRole("status").className;
+    expect(cls).toContain("bg-[length:200%_100%]");
+    expect(cls).toContain("bg-[linear-gradient");
   });
 
   it("has motion-reduce:animate-none for prefers-reduced-motion", () => {
@@ -81,11 +88,14 @@ describe("Skeleton component", () => {
   });
 
   /* ---------------------------------------------------------------- */
-  /* Background                                                        */
+  /* Background — shimmer gradient colors                              */
   /* ---------------------------------------------------------------- */
 
-  it("has neutral-700 background", () => {
+  it("uses neutral-800 to neutral-700 shimmer gradient", () => {
     render(<Skeleton />);
-    expect(screen.getByRole("status").className).toContain("bg-neutral-700");
+    const cls = screen.getByRole("status").className;
+    // Gradient includes neutral-800 (#262626) and neutral-700 (#404040)
+    expect(cls).toContain("#262626");
+    expect(cls).toContain("#404040");
   });
 });

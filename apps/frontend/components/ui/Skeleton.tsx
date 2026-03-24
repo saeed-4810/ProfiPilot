@@ -27,6 +27,16 @@ const VARIANT_CLASSES: Record<SkeletonVariant, string> = {
   rectangular: "rounded-lg",
 };
 
+/**
+ * Shimmer gradient background for skeleton loading.
+ * Uses a linear gradient that sweeps left-to-right via the `animate-shimmer`
+ * keyframe defined in tailwind.config.ts.
+ *
+ * neutral-800 (#262626) → neutral-700 (#404040) → neutral-800 (#262626)
+ */
+const SHIMMER_BG =
+  "bg-[length:200%_100%] bg-[linear-gradient(90deg,#262626_25%,#404040_50%,#262626_75%)]";
+
 /* ------------------------------------------------------------------ */
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
@@ -34,7 +44,7 @@ const VARIANT_CLASSES: Record<SkeletonVariant, string> = {
 /**
  * Skeleton placeholder for loading states.
  *
- * - Uses Tailwind animate-pulse for shimmer effect.
+ * - Uses a shimmer gradient animation (left-to-right sweep).
  * - prefers-reduced-motion: no animation, just a static gray block
  *   (handled via Tailwind's built-in motion-reduce support).
  * - Three shape variants: text, circular, rectangular.
@@ -53,7 +63,7 @@ export function Skeleton({ width, height, className = "", variant = "text" }: Sk
       role="status"
       aria-label="Loading"
       style={style}
-      className={`bg-neutral-700 animate-pulse motion-reduce:animate-none ${VARIANT_CLASSES[variant]} ${className}`.trim()}
+      className={`${SHIMMER_BG} animate-shimmer motion-reduce:animate-none ${VARIANT_CLASSES[variant]} ${className}`.trim()}
     />
   );
 }
