@@ -133,6 +133,7 @@ export default function AuditPage() {
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [progressStep, setProgressStep] = useState<number>(0);
   const [strategy, setStrategy] = useState<AuditStrategy>("mobile");
+  const [strategyOpen, setStrategyOpen] = useState(false);
 
   /* --- Recent audits state --- */
   const [recentAudits, setRecentAudits] = useState<RecentAuditItem[]>([]);
@@ -456,52 +457,95 @@ export default function AuditPage() {
                       </p>
                     )}
 
-                    {/* Engine Settings — Stitch-inspired row */}
-                    <div
-                      data-testid="engine-settings"
-                      className="flex items-center justify-between px-2"
-                    >
-                      <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                    {/* Engine Settings — Stitch card design */}
+                    <div data-testid="engine-settings">
+                      {/* Header row */}
+                      <div className="flex items-center justify-between px-2 mb-3">
+                        <div className="flex items-center gap-2 text-[10px] text-gray-500 font-medium uppercase tracking-[0.15em]">
                           <span className="material-symbols-outlined text-base" aria-hidden="true">
                             settings_input_component
                           </span>
                           <span>Engine Settings</span>
                         </div>
-
-                        {/* Strategy select */}
-                        <div className="relative">
-                          <select
-                            value={strategy}
-                            onChange={(e) => setStrategy(e.target.value as AuditStrategy)}
-                            data-testid="strategy-select"
-                            aria-label="Analysis profile"
-                            className="appearance-none bg-[#18181a] border border-white/[0.06] rounded-lg text-sm text-[#e5e2e3] pl-3 pr-8 py-1.5 outline-none focus:border-[#adc6ff]/40 transition-colors cursor-pointer"
-                          >
-                            <option value="mobile">Mobile Emulation</option>
-                            <option value="desktop">Desktop</option>
-                            <option value="both">Both (Mobile + Desktop)</option>
-                          </select>
-                          <span
-                            className="material-symbols-outlined text-sm text-gray-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"
-                            aria-hidden="true"
-                          >
-                            expand_more
+                        <div className="flex items-center gap-4 text-[11px] text-gray-600">
+                          <span className="flex items-center gap-1">
+                            <span className="w-1 h-1 rounded-full bg-[#4ae176]" />
+                            Engine Ready
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs" aria-hidden="true">
+                              history
+                            </span>
+                            0 audits today
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-4 text-[11px] text-gray-600">
-                        <span className="flex items-center gap-1">
-                          <span className="w-1 h-1 rounded-full bg-[#4ae176]" />
-                          Engine Ready
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <span className="material-symbols-outlined text-xs" aria-hidden="true">
-                            history
-                          </span>
-                          0 audits today
-                        </span>
+                      {/* Strategy dropdown card — Stitch style */}
+                      <div className="relative" data-testid="strategy-dropdown">
+                        <button
+                          type="button"
+                          onClick={() => setStrategyOpen((prev) => !prev)}
+                          data-testid="strategy-trigger"
+                          aria-expanded={strategyOpen}
+                          aria-haspopup="listbox"
+                          className="w-full p-4 rounded-xl border border-white/[0.06] bg-[#18181a] text-left transition-all hover:border-white/10"
+                        >
+                          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">
+                            Analysis Profile
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-[#e5e2e3]">
+                              {strategy === "mobile" && "Mobile Emulation"}
+                              {strategy === "desktop" && "Desktop"}
+                              {strategy === "both" && "Both (Mobile + Desktop)"}
+                            </span>
+                            <span
+                              className="material-symbols-outlined text-gray-500 text-lg"
+                              aria-hidden="true"
+                            >
+                              edit
+                            </span>
+                          </div>
+                        </button>
+
+                        {/* Dropdown options */}
+                        {strategyOpen && (
+                          <div
+                            role="listbox"
+                            aria-label="Analysis profile options"
+                            data-testid="strategy-options"
+                            className="absolute top-full left-0 right-0 mt-2 bg-[#222122] border border-white/10 rounded-xl shadow-2xl py-2 z-10"
+                          >
+                            {(
+                              [
+                                { value: "mobile", label: "Mobile Emulation" },
+                                { value: "desktop", label: "Desktop" },
+                                { value: "both", label: "Both (Mobile + Desktop)" },
+                              ] as const
+                            ).map((opt) => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                role="option"
+                                aria-selected={strategy === opt.value}
+                                data-testid={`strategy-option-${opt.value}`}
+                                onClick={() => {
+                                  setStrategy(opt.value);
+                                  setStrategyOpen(false);
+                                }}
+                                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 flex items-center justify-between transition-colors ${
+                                  strategy === opt.value ? "text-[#e5e2e3]" : "text-gray-500"
+                                }`}
+                              >
+                                <span>{opt.label}</span>
+                                {strategy === opt.value && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#4ae176]" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

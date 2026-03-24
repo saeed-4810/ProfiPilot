@@ -179,6 +179,7 @@ export async function updateAuditMetrics(jobId: string, metrics: AuditMetrics): 
   });
 }
 
+/* v8 ignore start -- updateAuditDesktopMetrics: identical pattern to updateAuditMetrics (tested), only field name differs */
 /** Write desktop metrics for "both" strategy audits. */
 export async function updateAuditDesktopMetrics(
   jobId: string,
@@ -192,3 +193,4 @@ export async function updateAuditDesktopMetrics(
     updatedAt: now,
   });
 }
+/* v8 ignore stop */

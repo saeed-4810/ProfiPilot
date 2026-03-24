@@ -884,47 +884,77 @@ describe("PERF-142: Step timer caps at penultimate step", () => {
 /* PERF-155: Engine Settings — strategy toggle                         */
 /* ================================================================== */
 
-describe("PERF-155: Engine Settings strategy select", () => {
-  it("renders engine settings row", () => {
+describe("PERF-155: Engine Settings strategy dropdown", () => {
+  it("renders engine settings panel", () => {
     render(<AuditPage />);
     expect(screen.getByTestId("engine-settings")).toBeInTheDocument();
     expect(screen.getByText("Engine Settings")).toBeInTheDocument();
   });
 
-  it("renders strategy select with three options", () => {
+  it("renders strategy dropdown trigger with default Mobile Emulation", () => {
     render(<AuditPage />);
-    const select = screen.getByTestId("strategy-select");
-    expect(select).toBeInTheDocument();
-    expect(select).toHaveAttribute("aria-label", "Analysis profile");
-
-    const options = select.querySelectorAll("option");
-    expect(options).toHaveLength(3);
-    expect(options[0]).toHaveValue("mobile");
-    expect(options[1]).toHaveValue("desktop");
-    expect(options[2]).toHaveValue("both");
+    const trigger = screen.getByTestId("strategy-trigger");
+    expect(trigger).toBeInTheDocument();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("Mobile Emulation")).toBeInTheDocument();
   });
 
-  it("defaults to Mobile Emulation", () => {
-    render(<AuditPage />);
-    expect(screen.getByTestId("strategy-select")).toHaveValue("mobile");
-  });
-
-  it("selects Desktop when changed", async () => {
+  it("opens dropdown options when trigger is clicked", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<AuditPage />);
 
-    await user.selectOptions(screen.getByTestId("strategy-select"), "desktop");
+    expect(screen.queryByTestId("strategy-options")).not.toBeInTheDocument();
 
-    expect(screen.getByTestId("strategy-select")).toHaveValue("desktop");
+    await user.click(screen.getByTestId("strategy-trigger"));
+
+    expect(screen.getByTestId("strategy-options")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-trigger")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("strategy-option-mobile")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-option-desktop")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-option-both")).toBeInTheDocument();
   });
 
-  it("selects Both when changed", async () => {
+  it("selects Desktop and closes dropdown", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<AuditPage />);
 
-    await user.selectOptions(screen.getByTestId("strategy-select"), "both");
+    await user.click(screen.getByTestId("strategy-trigger"));
+    await user.click(screen.getByTestId("strategy-option-desktop"));
 
-    expect(screen.getByTestId("strategy-select")).toHaveValue("both");
+    expect(screen.getByText("Desktop")).toBeInTheDocument();
+    expect(screen.queryByTestId("strategy-options")).not.toBeInTheDocument();
+  });
+
+  it("selects Both and closes dropdown", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<AuditPage />);
+
+    await user.click(screen.getByTestId("strategy-trigger"));
+    await user.click(screen.getByTestId("strategy-option-both"));
+
+    expect(screen.getByText("Both (Mobile + Desktop)")).toBeInTheDocument();
+    expect(screen.queryByTestId("strategy-options")).not.toBeInTheDocument();
+  });
+
+  it("toggles dropdown closed when trigger is clicked again", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<AuditPage />);
+
+    await user.click(screen.getByTestId("strategy-trigger"));
+    expect(screen.getByTestId("strategy-options")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("strategy-trigger"));
+    expect(screen.queryByTestId("strategy-options")).not.toBeInTheDocument();
+  });
+
+  it("marks current selection with aria-selected and green dot", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<AuditPage />);
+
+    await user.click(screen.getByTestId("strategy-trigger"));
+
+    expect(screen.getByTestId("strategy-option-mobile")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("strategy-option-desktop")).toHaveAttribute("aria-selected", "false");
   });
 
   it("sends selected strategy with audit submission", async () => {
@@ -937,8 +967,9 @@ describe("PERF-155: Engine Settings strategy select", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<AuditPage />);
 
-    // Select desktop strategy
-    await user.selectOptions(screen.getByTestId("strategy-select"), "desktop");
+    // Select desktop via dropdown
+    await user.click(screen.getByTestId("strategy-trigger"));
+    await user.click(screen.getByTestId("strategy-option-desktop"));
 
     // Fill URL and submit
     const input = screen.getByTestId("audit-url-input");
