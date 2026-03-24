@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   createAudit,
   getAuditStatus,
+  getRecentAudits,
   isTerminalStatus,
   TERMINAL_STATUSES,
   type AuditStatus,
@@ -24,7 +25,7 @@ afterEach(() => {
 /* ------------------------------------------------------------------ */
 
 describe("createAudit", () => {
-  it("sends POST /audits with correct body and credentials", async () => {
+  it("sends POST /audits with correct body and credentials (default mobile)", async () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({ jobId: "job-123", status: "queued", createdAt: "2026-03-17T00:00:00Z" }),
@@ -36,13 +37,45 @@ describe("createAudit", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ url: "https://example.com" }),
+      body: JSON.stringify({ url: "https://example.com", strategy: "mobile" }),
     });
     expect(result).toEqual({
       jobId: "job-123",
       status: "queued",
       createdAt: "2026-03-17T00:00:00Z",
     });
+  });
+
+  it("sends strategy=desktop when specified", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ jobId: "job-456", status: "queued", createdAt: "2026-03-17T00:00:00Z" }),
+    });
+
+    await createAudit("https://example.com", "desktop");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:3001/audits",
+      expect.objectContaining({
+        body: JSON.stringify({ url: "https://example.com", strategy: "desktop" }),
+      })
+    );
+  });
+
+  it("sends strategy=both when specified", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ jobId: "job-789", status: "queued", createdAt: "2026-03-17T00:00:00Z" }),
+    });
+
+    await createAudit("https://example.com", "both");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:3001/audits",
+      expect.objectContaining({
+        body: JSON.stringify({ url: "https://example.com", strategy: "both" }),
+      })
+    );
   });
 
   it("throws with status and code on 400 validation error", async () => {
@@ -206,5 +239,139 @@ describe("TERMINAL_STATUSES", () => {
   it("contains exactly completed, failed, cancelled", () => {
     const expected: AuditStatus[] = ["completed", "failed", "cancelled"];
     expect([...TERMINAL_STATUSES].sort()).toEqual(expected.sort());
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* getRecentAudits                                                    */
+/* ------------------------------------------------------------------ */
+
+describe("getRecentAudits", () => {
+  it("sends GET /audits/recent with credentials and default pagination", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ items: [], page: 1, size: 5, total: 0 }),
+    });
+
+    const result = await getRecentAudits();
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining("/audits/recent?page=1&size=5"),
+      expect.objectContaining({
+        method: "GET",
+        credentials: "include",
+      })
+    );
+    expect(result.items).toEqual([]);
+    expect(result.page).toBe(1);
+    expect(result.total).toBe(0);
+  });
+
+  it("sends custom page and size when provided", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ items: [], page: 2, size: 10, total: 15 }),
+    });
+
+    await getRecentAudits(2, 10);
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining("/audits/recent?page=2&size=10"),
+      expect.anything()
+    );
+  });
+
+  it("returns items with correct shape and pagination", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        items: [
+          {
+            jobId: "job-1",
+            url: "https://example.com",
+            status: "completed",
+            performanceScore: 0.95,
+            createdAt: "2026-03-20T10:00:00Z",
+            completedAt: "2026-03-20T10:01:00Z",
+          },
+        ],
+        page: 1,
+        size: 5,
+        total: 1,
+      }),
+    });
+
+    const result = await getRecentAudits();
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      jobId: "job-1",
+      url: "https://example.com",
+      status: "completed",
+      performanceScore: 0.95,
+    });
+    expect(result.page).toBe(1);
+    expect(result.total).toBe(1);
+  });
+
+  it("throws error with status and code on non-ok response", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({
+        status: 500,
+        code: "AUDIT_LIST_FAILED",
+        message: "Failed to retrieve recent audits.",
+      }),
+    });
+
+    try {
+      await getRecentAudits();
+      expect.fail("Should have thrown");
+    } catch (err: unknown) {
+      const typed = err as Error & { status: number; code: string };
+      expect(typed.message).toBe("Failed to retrieve recent audits.");
+      expect(typed.status).toBe(500);
+      expect(typed.code).toBe("AUDIT_LIST_FAILED");
+    }
+  });
+
+  it("uses fallback message when server error message is empty", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({
+        status: 500,
+        code: "UNKNOWN",
+      }),
+    });
+
+    try {
+      await getRecentAudits();
+      expect.fail("Should have thrown");
+    } catch (err: unknown) {
+      const typed = err as Error & { status: number; code: string };
+      expect(typed.message).toBe("Failed to fetch recent audits.");
+    }
+  });
+
+  it("uses fallback code when server error code is missing", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({
+        status: 401,
+        message: "Unauthorized",
+      }),
+    });
+
+    try {
+      await getRecentAudits();
+      expect.fail("Should have thrown");
+    } catch (err: unknown) {
+      const typed = err as Error & { status: number; code: string };
+      expect(typed.status).toBe(401);
+      expect(typed.code).toBe("UNKNOWN");
+    }
   });
 });

@@ -130,6 +130,44 @@ export async function getLastCompletedAuditByUrl(
 }
 /* v8 ignore stop */
 
+/**
+ * Get paginated audit jobs for a user, ordered by createdAt descending.
+ * Uses the composite index: audits(uid ASC, createdAt DESC).
+ * Applies safeParse to silently skip corrupt documents (ADR-021, W5).
+ * Returns audits + total count for pagination.
+ */
+export async function getAuditsByUser(
+  uid: string,
+  page: number,
+  size: number
+): Promise<{ audits: AuditJob[]; total: number }> {
+  const firestore = getFirebaseApp().firestore();
+  const collectionRef = firestore.collection(COLLECTION);
+
+  // Count total documents for this user
+  const allDocs = await collectionRef.where("uid", "==", uid).get();
+  const total = allDocs.size;
+
+  // Fetch paginated results ordered by createdAt descending
+  const offset = (page - 1) * size;
+  const snapshot = await collectionRef
+    .where("uid", "==", uid)
+    .orderBy("createdAt", "desc")
+    .offset(offset)
+    .limit(size)
+    .get();
+
+  const audits: AuditJob[] = [];
+  for (const doc of snapshot.docs) {
+    const parsed = AuditJobSchema.safeParse(doc.data());
+    if (parsed.success) {
+      audits.push({ ...parsed.data, strategy: parsed.data.strategy ?? "mobile" });
+    }
+  }
+
+  return { audits, total };
+}
+
 /** Write parsed CWV metrics to the audit document's metrics subdocument per ADR-012. */
 export async function updateAuditMetrics(jobId: string, metrics: AuditMetrics): Promise<void> {
   const firestore = getFirebaseApp().firestore();
@@ -140,3 +178,19 @@ export async function updateAuditMetrics(jobId: string, metrics: AuditMetrics): 
     updatedAt: now,
   });
 }
+
+/* v8 ignore start -- updateAuditDesktopMetrics: identical pattern to updateAuditMetrics (tested), only field name differs */
+/** Write desktop metrics for "both" strategy audits. */
+export async function updateAuditDesktopMetrics(
+  jobId: string,
+  desktopMetrics: AuditMetrics
+): Promise<void> {
+  const firestore = getFirebaseApp().firestore();
+  const now = new Date().toISOString();
+
+  await firestore.collection(COLLECTION).doc(jobId).update({
+    desktopMetrics,
+    updatedAt: now,
+  });
+}
+/* v8 ignore stop */

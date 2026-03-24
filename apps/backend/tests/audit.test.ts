@@ -37,6 +37,14 @@ const mockSet = vi.fn();
 const mockGet = vi.fn();
 const mockUpdate = vi.fn();
 
+// Query chain mocks for getAuditsByUser (where → orderBy → offset → limit → get)
+const mockWhere = vi.fn();
+const mockOrderBy = vi.fn();
+const mockOffset = vi.fn();
+const mockLimit = vi.fn();
+const mockQueryGet = vi.fn();
+const mockCountGet = vi.fn();
+
 const mockFirestore = {
   collection: vi.fn(() => ({
     doc: vi.fn(() => ({
@@ -44,6 +52,7 @@ const mockFirestore = {
       get: mockGet,
       update: mockUpdate,
     })),
+    where: mockWhere,
   })),
 };
 
@@ -68,6 +77,18 @@ beforeEach(() => {
       updatedAt: "2026-03-17T00:00:00.000Z",
     }),
   });
+
+  // Default: query chain for getAuditsByUser
+  // First call: count query (where → get), Second call: paginated (where → orderBy → offset → limit → get)
+  mockWhere.mockReturnValue({
+    get: mockCountGet,
+    orderBy: mockOrderBy,
+  });
+  mockCountGet.mockResolvedValue({ size: 0 });
+  mockOrderBy.mockReturnValue({ offset: mockOffset });
+  mockOffset.mockReturnValue({ limit: mockLimit });
+  mockLimit.mockReturnValue({ get: mockQueryGet });
+  mockQueryGet.mockResolvedValue({ empty: true, docs: [] });
 });
 
 // T-PERF-100-001: POST /audits with valid URL → 202 with jobId
@@ -128,6 +149,60 @@ describe("T-PERF-100-002: POST /audits (invalid URL)", () => {
       status: 400,
       code: "VALIDATION_ERROR",
     });
+  });
+});
+
+// PERF-155: POST /audits with strategy parameter
+describe("PERF-155: POST /audits with strategy", () => {
+  it("accepts strategy=mobile and returns 202", async () => {
+    const res = await request(app)
+      .post("/audits")
+      .set("Cookie", "__session=valid-session")
+      .send({ url: "https://example.com", strategy: "mobile" });
+
+    expect(res.status).toBe(202);
+    expect(res.body.jobId).toBeDefined();
+  });
+
+  it("accepts strategy=desktop and returns 202", async () => {
+    const res = await request(app)
+      .post("/audits")
+      .set("Cookie", "__session=valid-session")
+      .send({ url: "https://example.com", strategy: "desktop" });
+
+    expect(res.status).toBe(202);
+    expect(res.body.jobId).toBeDefined();
+  });
+
+  it("accepts strategy=both and returns 202", async () => {
+    const res = await request(app)
+      .post("/audits")
+      .set("Cookie", "__session=valid-session")
+      .send({ url: "https://example.com", strategy: "both" });
+
+    expect(res.status).toBe(202);
+    expect(res.body.jobId).toBeDefined();
+  });
+
+  it("defaults to mobile when strategy is not provided", async () => {
+    const res = await request(app)
+      .post("/audits")
+      .set("Cookie", "__session=valid-session")
+      .send({ url: "https://example.com" });
+
+    expect(res.status).toBe(202);
+    // Strategy defaults to "mobile" — verified by the Firestore set call
+    expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({ strategy: "mobile" }));
+  });
+
+  it("rejects invalid strategy value with 400", async () => {
+    const res = await request(app)
+      .post("/audits")
+      .set("Cookie", "__session=valid-session")
+      .send({ url: "https://example.com", strategy: "invalid" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("VALIDATION_ERROR");
   });
 });
 
@@ -516,5 +591,184 @@ describe("Audit error paths (coverage)", () => {
 
     expect(res.status).toBe(503);
     expect(res.body.code).toBe("SERVICE_UNAVAILABLE");
+  });
+});
+
+/* ================================================================== */
+/* PERF-155: GET /audits/recent — list recent audits for user          */
+/* ================================================================== */
+
+describe("PERF-155: GET /audits/recent (paginated)", () => {
+  it("returns 200 with empty items and pagination metadata", async () => {
+    const res = await request(app).get("/audits/recent").set("Cookie", "__session=valid-session");
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual([]);
+    expect(res.body.page).toBe(1);
+    expect(res.body.size).toBe(5);
+    expect(res.body.total).toBe(0);
+  });
+
+  it("returns 200 with recent audit items including score and pagination", async () => {
+    mockCountGet.mockResolvedValue({ size: 2 });
+    mockQueryGet.mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          data: () => ({
+            jobId: "job-001",
+            uid: "user-123",
+            url: "https://example.com",
+            status: "completed",
+            retryCount: 0,
+            createdAt: "2026-03-20T10:00:00.000Z",
+            updatedAt: "2026-03-20T10:01:00.000Z",
+            completedAt: "2026-03-20T10:01:00.000Z",
+            metrics: {
+              lcp: 1200,
+              cls: 0.05,
+              tbt: 100,
+              fcp: 800,
+              ttfb: 200,
+              si: 1000,
+              performanceScore: 0.98,
+              lighthouseVersion: "12.0.0",
+              fieldData: null,
+              fetchedAt: "2026-03-20T10:01:00.000Z",
+            },
+          }),
+        },
+        {
+          data: () => ({
+            jobId: "job-002",
+            uid: "user-123",
+            url: "https://other.com",
+            status: "failed",
+            retryCount: 3,
+            lastError: "TIMEOUT",
+            createdAt: "2026-03-19T08:00:00.000Z",
+            updatedAt: "2026-03-19T08:05:00.000Z",
+          }),
+        },
+      ],
+    });
+
+    const res = await request(app).get("/audits/recent").set("Cookie", "__session=valid-session");
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(2);
+    expect(res.body.page).toBe(1);
+    expect(res.body.total).toBe(2);
+
+    expect(res.body.items[0]).toMatchObject({
+      jobId: "job-001",
+      url: "https://example.com",
+      status: "completed",
+      performanceScore: 0.98,
+    });
+
+    expect(res.body.items[1]).toMatchObject({
+      jobId: "job-002",
+      url: "https://other.com",
+      status: "failed",
+      performanceScore: null,
+    });
+  });
+
+  it("respects ?size query param (clamped to max 20)", async () => {
+    await request(app).get("/audits/recent?size=10").set("Cookie", "__session=valid-session");
+
+    expect(mockLimit).toHaveBeenCalledWith(10);
+  });
+
+  it("defaults size to 5 when not provided", async () => {
+    await request(app).get("/audits/recent").set("Cookie", "__session=valid-session");
+
+    expect(mockLimit).toHaveBeenCalledWith(5);
+  });
+
+  it("clamps size to max 20", async () => {
+    await request(app).get("/audits/recent?size=100").set("Cookie", "__session=valid-session");
+
+    expect(mockLimit).toHaveBeenCalledWith(20);
+  });
+
+  it("supports page parameter for pagination", async () => {
+    await request(app).get("/audits/recent?page=2&size=5").set("Cookie", "__session=valid-session");
+
+    // page 2, size 5 → offset should be (2-1)*5 = 5
+    expect(mockOffset).toHaveBeenCalledWith(5);
+    expect(mockLimit).toHaveBeenCalledWith(5);
+  });
+
+  it("returns correct page number in response", async () => {
+    const res = await request(app)
+      .get("/audits/recent?page=3")
+      .set("Cookie", "__session=valid-session");
+
+    expect(res.status).toBe(200);
+    expect(res.body.page).toBe(3);
+  });
+
+  it("returns 401 when not authenticated", async () => {
+    mockVerifySessionCookie.mockRejectedValue(new Error("Invalid session"));
+
+    const res = await request(app).get("/audits/recent");
+
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 500 when Firestore query fails", async () => {
+    mockCountGet.mockRejectedValue(new Error("Firestore unavailable"));
+
+    const res = await request(app).get("/audits/recent").set("Cookie", "__session=valid-session");
+
+    expect(res.status).toBe(500);
+    expect(res.body).toMatchObject({
+      status: 500,
+      code: "AUDIT_LIST_FAILED",
+      message: "Failed to retrieve recent audits.",
+    });
+  });
+
+  it("passes through AppError from service layer", async () => {
+    const { AppError } = await import("../src/domain/errors.js");
+    mockCountGet.mockRejectedValue(new AppError(503, "SERVICE_UNAVAILABLE", "DB down."));
+
+    const res = await request(app).get("/audits/recent").set("Cookie", "__session=valid-session");
+
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe("SERVICE_UNAVAILABLE");
+  });
+
+  it("silently skips corrupt documents (safeParse filter)", async () => {
+    mockCountGet.mockResolvedValue({ size: 2 });
+    mockQueryGet.mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          data: () => ({
+            jobId: "job-valid",
+            uid: "user-123",
+            url: "https://good.com",
+            status: "completed",
+            retryCount: 0,
+            createdAt: "2026-03-20T10:00:00.000Z",
+            updatedAt: "2026-03-20T10:01:00.000Z",
+          }),
+        },
+        {
+          data: () => ({
+            jobId: "job-corrupt",
+          }),
+        },
+      ],
+    });
+
+    const res = await request(app).get("/audits/recent").set("Cookie", "__session=valid-session");
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].jobId).toBe("job-valid");
   });
 });

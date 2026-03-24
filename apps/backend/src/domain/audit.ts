@@ -16,14 +16,23 @@ export const AuditStatus = {
 
 export type AuditStatus = (typeof AuditStatus)[keyof typeof AuditStatus];
 
-/** Audit strategy per ADR-012 (mobile only for MVP). */
-export type AuditStrategy = "mobile" | "desktop";
+/**
+ * Audit strategy per ADR-012.
+ * - "mobile": PSI mobile emulation (Moto G Power + slow 4G)
+ * - "desktop": PSI desktop (no throttling)
+ * - "both": runs two PSI calls (mobile + desktop), stores combined metrics
+ */
+export type AuditStrategy = "mobile" | "desktop" | "both";
+
+/** The PSI API only accepts "mobile" or "desktop" — "both" is resolved at the service layer. */
+export type PSIStrategy = "mobile" | "desktop";
 
 /** Zod schema for POST /audits request body (CTR-005). */
 export const CreateAuditSchema = z.object({
   url: z.url("A valid URL is required.").refine((val) => val.startsWith("https://"), {
     message: "Only HTTPS URLs are allowed.",
   }),
+  strategy: z.enum(["mobile", "desktop", "both"]).optional().default("mobile"),
 });
 
 export type CreateAuditRequest = z.infer<typeof CreateAuditSchema>;
@@ -58,7 +67,10 @@ export interface AuditJob {
   retryCount: number;
   lastError?: string | undefined;
   nextRetryAt?: string | undefined;
+  /** Mobile metrics (or single-strategy metrics when strategy is "mobile" or "desktop"). */
   metrics?: AuditMetrics | undefined;
+  /** Desktop metrics — only populated when strategy is "both". */
+  desktopMetrics?: AuditMetrics | undefined;
   createdAt: string;
   updatedAt: string;
   completedAt?: string | undefined;
@@ -73,11 +85,12 @@ export const AuditJobSchema = z.object({
   uid: z.string(),
   url: z.string(),
   status: z.enum(["queued", "running", "completed", "failed", "cancelled", "retrying"]),
-  strategy: z.enum(["mobile", "desktop"]).optional(),
+  strategy: z.enum(["mobile", "desktop", "both"]).optional(),
   retryCount: z.number(),
   lastError: z.string().optional(),
   nextRetryAt: z.string().optional(),
   metrics: AuditMetricsSchema.optional(),
+  desktopMetrics: AuditMetricsSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   completedAt: z.string().optional(),

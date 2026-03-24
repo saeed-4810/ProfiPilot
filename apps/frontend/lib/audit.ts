@@ -10,6 +10,9 @@ export interface CreateAuditResponse {
 /** Audit job status values per ADR-006 state machine. */
 export type AuditStatus = "queued" | "running" | "retrying" | "completed" | "failed" | "cancelled";
 
+/** Audit strategy — matches backend AuditStrategy type. */
+export type AuditStrategy = "mobile" | "desktop" | "both";
+
 /** Raw CWV metrics from the audit status response. */
 export interface AuditMetrics {
   lcp: number | null;
@@ -46,16 +49,19 @@ export interface ApiError {
 }
 
 /**
- * Create a new audit job by submitting a URL.
+ * Create a new audit job by submitting a URL with optional strategy.
  * POST /audits with session cookie (credentials: "include").
  * Returns 202 with jobId on success.
  */
-export async function createAudit(url: string): Promise<CreateAuditResponse> {
+export async function createAudit(
+  url: string,
+  strategy: AuditStrategy = "mobile"
+): Promise<CreateAuditResponse> {
   const response = await fetch(`${API_BASE}/audits`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, strategy }),
   });
 
   if (!response.ok) {
@@ -95,6 +101,56 @@ export async function getAuditStatus(jobId: string): Promise<AuditStatusResponse
   }
 
   return (await response.json()) as AuditStatusResponse;
+}
+
+/* ------------------------------------------------------------------ */
+/* Recent audits — GET /audits/recent (PERF-155)                      */
+/* ------------------------------------------------------------------ */
+
+/** Single item in the recent audits response. */
+export interface RecentAuditItem {
+  jobId: string;
+  url: string;
+  status: AuditStatus;
+  performanceScore: number | null;
+  createdAt: string;
+  completedAt?: string;
+}
+
+/** Response shape from GET /audits/recent. */
+export interface RecentAuditsResponse {
+  items: RecentAuditItem[];
+  page: number;
+  size: number;
+  total: number;
+}
+
+/**
+ * Fetch recent audit jobs for the authenticated user with pagination.
+ * GET /audits/recent with session cookie (credentials: "include").
+ */
+export async function getRecentAudits(
+  page: number = 1,
+  size: number = 5
+): Promise<RecentAuditsResponse> {
+  const response = await fetch(`${API_BASE}/audits/recent?page=${page}&size=${size}`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = (await response.json()) as ApiError;
+    const err = new Error(error.message ?? "Failed to fetch recent audits.") as Error & {
+      status: number;
+      code: string;
+    };
+    err.status = response.status;
+    err.code = error.code ?? "UNKNOWN";
+    throw err;
+  }
+
+  return (await response.json()) as RecentAuditsResponse;
 }
 
 /** Terminal statuses — polling should stop when status reaches one of these. */

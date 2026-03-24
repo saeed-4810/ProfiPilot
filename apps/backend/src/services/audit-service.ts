@@ -1,6 +1,10 @@
 import { AppError } from "../domain/errors.js";
-import type { AuditJob, AuditMetrics, AuditStatus } from "../domain/audit.js";
-import { createAuditJob as createJob, getAuditJob } from "../adapters/firestore-audit.js";
+import type { AuditJob, AuditMetrics, AuditStatus, AuditStrategy } from "../domain/audit.js";
+import {
+  createAuditJob as createJob,
+  getAuditJob,
+  getAuditsByUser,
+} from "../adapters/firestore-audit.js";
 import { processAuditJob } from "./audit-worker.js";
 
 /** Response shape for POST /audits (CTR-005). */
@@ -27,8 +31,12 @@ export interface AuditStatusResult {
  * Delegates persistence to the Firestore adapter.
  * Triggers the audit worker asynchronously (fire-and-forget for MVP).
  */
-export async function createAudit(uid: string, url: string): Promise<CreateAuditResult> {
-  const job = await createJob(uid, url);
+export async function createAudit(
+  uid: string,
+  url: string,
+  strategy: AuditStrategy = "mobile"
+): Promise<CreateAuditResult> {
+  const job = await createJob(uid, url, strategy);
 
   // Fire-and-forget: worker processes in background (MVP — same process, no queue)
   void processAuditJob(job.jobId);
@@ -65,4 +73,45 @@ export async function getAuditStatus(uid: string, jobId: string): Promise<AuditS
     ...(job.lastError !== undefined ? { lastError: job.lastError } : {}),
     ...(job.metrics !== undefined ? { metrics: job.metrics } : {}),
   };
+}
+
+/** Response item shape for GET /audits/recent. */
+export interface RecentAuditItem {
+  jobId: string;
+  url: string;
+  status: AuditStatus;
+  performanceScore: number | null;
+  createdAt: string;
+  completedAt?: string | undefined;
+}
+
+/** Response shape for GET /audits/recent. */
+export interface RecentAuditsResult {
+  items: RecentAuditItem[];
+  page: number;
+  size: number;
+  total: number;
+}
+
+/**
+ * List recent audit jobs for the authenticated user with pagination.
+ * Returns paginated audits with URL, status, score, timestamps, and total count.
+ */
+export async function listRecentAudits(
+  uid: string,
+  page: number,
+  size: number
+): Promise<RecentAuditsResult> {
+  const { audits, total } = await getAuditsByUser(uid, page, size);
+
+  const items: RecentAuditItem[] = audits.map((job) => ({
+    jobId: job.jobId,
+    url: job.url,
+    status: job.status,
+    performanceScore: job.metrics?.performanceScore ?? null,
+    createdAt: job.createdAt,
+    ...(job.completedAt !== undefined ? { completedAt: job.completedAt } : {}),
+  }));
+
+  return { items, page, size, total };
 }

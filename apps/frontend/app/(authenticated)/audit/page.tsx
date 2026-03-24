@@ -25,12 +25,15 @@ import { AuditProgress } from "@/components/ui/AuditProgress";
 import {
   createAudit,
   getAuditStatus,
+  getRecentAudits,
   isTerminalStatus,
   COPY_URL_VALIDATION_ERROR,
   COPY_ONBOARDING_HELPER,
   COPY_AUDIT_FAILED,
   COPY_AUDIT_COMPLETED,
   type AuditStatus,
+  type AuditStrategy,
+  type RecentAuditItem,
 } from "@/lib/audit";
 
 /* ------------------------------------------------------------------ */
@@ -61,6 +64,59 @@ const STEP_ADVANCE_MS = 4_000;
 const TOTAL_STEPS = 5;
 
 /* ------------------------------------------------------------------ */
+/* Recent audit helpers — Stitch design tokens                        */
+/* ------------------------------------------------------------------ */
+
+/** Status icon name for the recent audit row. */
+function getStatusIcon(status: string): string {
+  switch (status) {
+    case "completed":
+      return "task_alt";
+    case "failed":
+    case "cancelled":
+      return "priority_high";
+    default:
+      return "schedule";
+  }
+}
+
+/** Status icon container style (bg + text color). */
+function getStatusIconStyle(status: string): string {
+  switch (status) {
+    case "completed":
+      return "bg-[#4ae176]/10 text-[#4ae176]";
+    case "failed":
+    case "cancelled":
+      return "bg-[#ffb95f]/10 text-[#ffb95f]";
+    default:
+      return "bg-white/5 text-gray-500";
+  }
+}
+
+/** Score color based on Lighthouse thresholds (0-1 scale). */
+function getScoreColor(score: number): string {
+  if (score >= 0.9) return "text-[#4ae176]";
+  if (score >= 0.5) return "text-[#ffb95f]";
+  return "text-red-400";
+}
+
+/** Format ISO timestamp to relative time string. */
+function formatRelativeTime(iso: string): string {
+  const now = Date.now();
+  const then = new Date(iso).getTime();
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60_000);
+  const diffHr = Math.floor(diffMs / 3_600_000);
+  const diffDay = Math.floor(diffMs / 86_400_000);
+
+  if (diffMin < 1) return "Just now";
+  if (diffMin < 60) return `${diffMin} min ago`;
+  if (diffHr < 24) return `${diffHr} hour${diffHr === 1 ? "" : "s"} ago`;
+  if (diffDay === 1) return "Yesterday";
+  return `${diffDay} days ago`;
+}
+
+/* ------------------------------------------------------------------ */
 /* AuditPage component                                                */
 /* ------------------------------------------------------------------ */
 
@@ -76,6 +132,15 @@ export default function AuditPage() {
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [progressStep, setProgressStep] = useState<number>(0);
+  const [strategy, setStrategy] = useState<AuditStrategy>("mobile");
+  const [strategyOpen, setStrategyOpen] = useState(false);
+
+  /* --- Recent audits state --- */
+  const [recentAudits, setRecentAudits] = useState<RecentAuditItem[]>([]);
+  const [recentLoading, setRecentLoading] = useState(true);
+  const [recentPage, setRecentPage] = useState(1);
+  const [recentTotal, setRecentTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   /* --- Refs --- */
   const urlInputRef = useRef<HTMLInputElement>(null);
@@ -120,6 +185,47 @@ export default function AuditPage() {
       stopStepTimer();
     };
   }, [stopPolling, stopStepTimer]);
+
+  /* --- Fetch recent audits on mount --- */
+  useEffect(() => {
+    let cancelled = false;
+    setRecentLoading(true);
+    getRecentAudits(1, 5)
+      .then((res) => {
+        if (!cancelled) {
+          setRecentAudits(res.items);
+          setRecentTotal(res.total);
+          setRecentPage(1);
+        }
+      })
+      .catch(() => {
+        /* Silently fail — recent audits is non-critical UI */
+      })
+      .finally(() => {
+        if (!cancelled) setRecentLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /* --- Load more recent audits --- */
+  const handleLoadMore = useCallback(() => {
+    const nextPage = recentPage + 1;
+    setLoadingMore(true);
+    getRecentAudits(nextPage, 5)
+      .then((res) => {
+        setRecentAudits((prev) => [...prev, ...res.items]);
+        setRecentTotal(res.total);
+        setRecentPage(nextPage);
+      })
+      .catch(() => {
+        /* Silently fail */
+      })
+      .finally(() => {
+        setLoadingMore(false);
+      });
+  }, [recentPage]);
 
   /* --- Pre-fill URL from query param --- */
   useEffect(() => {
@@ -194,7 +300,7 @@ export default function AuditPage() {
       setProgressStep(0);
 
       try {
-        const result = await createAudit(parsed.data.url);
+        const result = await createAudit(parsed.data.url, strategy);
         setJobId(result.jobId);
         setAuditStatus(result.status);
         startPolling(result.jobId);
@@ -351,30 +457,95 @@ export default function AuditPage() {
                       </p>
                     )}
 
-                    {/* Engine settings row — Stitch: flex justify-between px-2 */}
-                    <div className="flex items-center justify-between px-2">
-                      <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                    {/* Engine Settings — Stitch card design */}
+                    <div data-testid="engine-settings">
+                      {/* Header row */}
+                      <div className="flex items-center justify-between px-2 mb-5">
+                        <div className="flex items-center gap-2 text-[10px] text-gray-500 font-medium uppercase tracking-[0.15em]">
                           <span className="material-symbols-outlined text-base" aria-hidden="true">
                             settings_input_component
                           </span>
                           <span>Engine Settings</span>
-                          <span className="material-symbols-outlined text-sm" aria-hidden="true">
-                            expand_more
+                        </div>
+                        <div className="flex items-center gap-4 text-[11px] text-gray-600">
+                          <span className="flex items-center gap-1">
+                            <span className="w-1 h-1 rounded-full bg-[#4ae176]" />
+                            Engine Ready
+                          </span>
+                          <span className="flex items-center gap-1" data-testid="audit-count">
+                            <span className="material-symbols-outlined text-xs" aria-hidden="true">
+                              history
+                            </span>
+                            {recentTotal} audit{recentTotal === 1 ? "" : "s"} total
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4 text-[11px] text-gray-600">
-                        <span className="flex items-center gap-1">
-                          <span className="w-1 h-1 rounded-full bg-[#4ae176]" />
-                          Engine Ready
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <span className="material-symbols-outlined text-xs" aria-hidden="true">
-                            history
-                          </span>
-                          0 audits today
-                        </span>
+
+                      {/* Strategy dropdown card — Stitch style, 1/3 width */}
+                      <div className="relative w-1/3" data-testid="strategy-dropdown">
+                        <button
+                          type="button"
+                          onClick={() => setStrategyOpen((prev) => !prev)}
+                          data-testid="strategy-trigger"
+                          aria-expanded={strategyOpen}
+                          aria-haspopup="listbox"
+                          className="w-full p-4 rounded-xl border border-white/[0.06] bg-[#18181a] text-left transition-all hover:border-white/10"
+                        >
+                          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">
+                            Analysis Profile
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-[#e5e2e3]">
+                              {strategy === "mobile" && "Mobile Emulation"}
+                              {strategy === "desktop" && "Desktop"}
+                              {strategy === "both" && "Both (Mobile + Desktop)"}
+                            </span>
+                            <span
+                              className="material-symbols-outlined text-gray-500 text-lg"
+                              aria-hidden="true"
+                            >
+                              edit
+                            </span>
+                          </div>
+                        </button>
+
+                        {/* Dropdown options */}
+                        {strategyOpen && (
+                          <div
+                            role="listbox"
+                            aria-label="Analysis profile options"
+                            data-testid="strategy-options"
+                            className="absolute top-full left-0 right-0 mt-2 bg-[#222122] border border-white/10 rounded-xl shadow-2xl py-2 z-10"
+                          >
+                            {(
+                              [
+                                { value: "mobile", label: "Mobile Emulation" },
+                                { value: "desktop", label: "Desktop" },
+                                { value: "both", label: "Both (Mobile + Desktop)" },
+                              ] as const
+                            ).map((opt) => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                role="option"
+                                aria-selected={strategy === opt.value}
+                                data-testid={`strategy-option-${opt.value}`}
+                                onClick={() => {
+                                  setStrategy(opt.value);
+                                  setStrategyOpen(false);
+                                }}
+                                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 flex items-center justify-between transition-colors ${
+                                  strategy === opt.value ? "text-[#e5e2e3]" : "text-gray-500"
+                                }`}
+                              >
+                                <span>{opt.label}</span>
+                                {strategy === opt.value && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#4ae176]" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -431,7 +602,6 @@ export default function AuditPage() {
 
           {/* -------------------------------------------------------- */}
           {/* Recent Projects — Stitch: mt-24 max-w-4xl               */}
-          {/* Placeholder for MVP — will be wired to listProjects()   */}
           {/* -------------------------------------------------------- */}
           <div className="mt-24 max-w-4xl mx-auto" data-testid="recent-projects">
             <div className="flex items-center justify-between mb-8 px-2">
@@ -440,11 +610,112 @@ export default function AuditPage() {
               </h2>
             </div>
             <div className="grid grid-cols-1 gap-3">
-              {/* Empty state — no audits yet */}
-              <div className="flex items-center justify-center p-8 rounded-xl border border-white/[0.05] text-gray-600 text-sm">
-                <span>No audits yet. Enter a URL above to get started.</span>
-              </div>
+              {/* Loading skeleton */}
+              {recentLoading && (
+                <div data-testid="recent-loading">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="flex items-center gap-5 p-4 rounded-xl animate-pulse">
+                      <div className="w-9 h-9 rounded-lg bg-white/5" />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-3.5 w-48 rounded bg-white/5" />
+                        <div className="h-2.5 w-32 rounded bg-white/5" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!recentLoading && recentAudits.length === 0 && (
+                <div
+                  data-testid="recent-empty"
+                  className="flex items-center justify-center p-8 rounded-xl border border-white/[0.05] text-gray-600 text-sm"
+                >
+                  <span>No audits yet. Enter a URL above to get started.</span>
+                </div>
+              )}
+
+              {/* Audit rows — Stitch design */}
+              {!recentLoading &&
+                recentAudits.map((audit) => (
+                  <div
+                    key={audit.jobId}
+                    data-testid={`recent-audit-${audit.jobId}`}
+                    onClick={() => {
+                      if (audit.status === "completed") {
+                        router.push(`/results?id=${audit.jobId}`);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if ((e.key === "Enter" || e.key === " ") && audit.status === "completed") {
+                        router.push(`/results?id=${audit.jobId}`);
+                      }
+                    }}
+                    role={audit.status === "completed" ? "link" : undefined}
+                    tabIndex={audit.status === "completed" ? 0 : undefined}
+                    className="group flex items-center justify-between p-4 rounded-xl hover:bg-white/[0.03] border border-transparent hover:border-white/[0.05] transition-all cursor-pointer"
+                  >
+                    <div className="flex items-center gap-5">
+                      {/* Status icon — Stitch: colored bg circle */}
+                      <div
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center ${getStatusIconStyle(audit.status)}`}
+                      >
+                        <span className="material-symbols-outlined text-xl" aria-hidden="true">
+                          {getStatusIcon(audit.status)}
+                        </span>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-medium">
+                          {audit.url.replace(/^https?:\/\//, "")}
+                        </h4>
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          {formatRelativeTime(audit.createdAt)}
+                          {audit.status === "completed" && audit.performanceScore !== null && (
+                            <>
+                              {" \u2022 "}
+                              <span
+                                className={`font-medium ${getScoreColor(audit.performanceScore)}`}
+                              >
+                                Score {Math.round(audit.performanceScore * 100)}
+                              </span>
+                            </>
+                          )}
+                          {audit.status === "failed" && (
+                            <>
+                              {" \u2022 "}
+                              <span className="font-medium text-red-400">Failed</span>
+                            </>
+                          )}
+                          {(audit.status === "queued" || audit.status === "running") && (
+                            <>
+                              {" \u2022 "}
+                              <span className="font-medium text-[#adc6ff]">In progress</span>
+                            </>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="material-symbols-outlined text-gray-700 group-hover:text-[#adc6ff] group-hover:translate-x-1 transition-all motion-reduce:transition-none">
+                      chevron_right
+                    </span>
+                  </div>
+                ))}
             </div>
+
+            {/* Load more button — shown when more items exist */}
+            {!recentLoading && recentAudits.length < recentTotal && (
+              <div className="mt-6 flex justify-center">
+                <button
+                  type="button"
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  data-testid="recent-load-more"
+                  className="text-[11px] uppercase tracking-widest text-gray-500 hover:text-white transition-colors disabled:opacity-50"
+                >
+                  {loadingMore ? "Loading..." : "Load more"}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -9,10 +9,13 @@ const mockUpdateAuditStatus = vi.fn();
 const mockUpdateAuditMetrics = vi.fn();
 const mockFetchPageSpeedData = vi.fn();
 
+const mockUpdateAuditDesktopMetrics = vi.fn();
+
 vi.mock("../src/adapters/firestore-audit.js", () => ({
   getAuditJob: (...args: unknown[]) => mockGetAuditJob(...args),
   updateAuditStatus: (...args: unknown[]) => mockUpdateAuditStatus(...args),
   updateAuditMetrics: (...args: unknown[]) => mockUpdateAuditMetrics(...args),
+  updateAuditDesktopMetrics: (...args: unknown[]) => mockUpdateAuditDesktopMetrics(...args),
 }));
 
 vi.mock("../src/lib/psi-client.js", () => ({
@@ -71,11 +74,18 @@ async function runWithTimers(jobId: string): Promise<void> {
   await promise;
 }
 
+/** Fixture: a queued audit job with "both" strategy. */
+const bothJob: AuditJob = {
+  ...queuedJob,
+  strategy: "both",
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetAuditJob.mockResolvedValue(queuedJob);
   mockUpdateAuditStatus.mockResolvedValue(undefined);
   mockUpdateAuditMetrics.mockResolvedValue(undefined);
+  mockUpdateAuditDesktopMetrics.mockResolvedValue(undefined);
   mockFetchPageSpeedData.mockResolvedValue(validPSIResponse);
 });
 
@@ -357,6 +367,29 @@ describe("P-ENGINE-001: processAuditJob (full success — metrics visible)", () 
     expect(metrics["lcp"]).toBe(2500);
     expect(metrics["performanceScore"]).toBe(0.85);
     expect(metrics["fieldData"]).toBeDefined();
+
+    // Status completed
+    expect(mockUpdateAuditStatus).toHaveBeenCalledWith("job-001", "completed");
+  });
+});
+
+// PERF-155: "both" strategy runs mobile + desktop PSI calls
+describe("PERF-155: processAuditJob (both strategy)", () => {
+  it("runs mobile then desktop PSI calls and stores both metrics", async () => {
+    mockGetAuditJob.mockResolvedValue(bothJob);
+
+    await runWithTimers("job-001");
+
+    // Two PSI calls: mobile first, then desktop
+    expect(mockFetchPageSpeedData).toHaveBeenCalledTimes(2);
+    expect(mockFetchPageSpeedData).toHaveBeenNthCalledWith(1, "https://example.com", "mobile");
+    expect(mockFetchPageSpeedData).toHaveBeenNthCalledWith(2, "https://example.com", "desktop");
+
+    // Mobile metrics stored via updateAuditMetrics
+    expect(mockUpdateAuditMetrics).toHaveBeenCalledOnce();
+
+    // Desktop metrics stored via updateAuditDesktopMetrics
+    expect(mockUpdateAuditDesktopMetrics).toHaveBeenCalledOnce();
 
     // Status completed
     expect(mockUpdateAuditStatus).toHaveBeenCalledWith("job-001", "completed");
