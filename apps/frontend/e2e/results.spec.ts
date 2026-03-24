@@ -38,10 +38,13 @@ test.describe("Results flow — /results", () => {
     await page.getByTestId("audit-url-input").fill("https://example.com");
     await page.getByTestId("audit-submit").click();
 
-    // Wait for audit to complete
-    await expect(page.getByTestId("audit-success").or(page.getByTestId("audit-error"))).toBeVisible(
-      { timeout: 150_000 }
-    );
+    // Wait for audit to complete (PERF-142: audit-error-progress for failed audits)
+    await expect(
+      page
+        .getByTestId("audit-success")
+        .or(page.getByTestId("audit-error-progress"))
+        .or(page.getByTestId("audit-error"))
+    ).toBeVisible({ timeout: 150_000 });
 
     // If audit succeeded, wait for auto-redirect to /results?id=<auditId>
     const success = page.getByTestId("audit-success");
@@ -60,20 +63,17 @@ test.describe("Results flow — /results", () => {
           .or(page.getByTestId("results-not-completed"))
       ).toBeVisible({ timeout: 30_000 });
 
-      // If content loaded, verify key sections
+      // If content loaded, verify key sections (PERF-143: metrics overview always present)
       const content = page.getByTestId("results-content");
       if (await content.isVisible()) {
-        // Executive summary section
-        await expect(page.getByTestId("executive-summary")).toBeVisible();
+        // Metrics overview section — always present when audit has metrics
+        await expect(page.getByTestId("metrics-overview")).toBeVisible();
 
-        // Recommendations section
-        await expect(page.getByTestId("recommendations")).toBeVisible();
-
-        // Dev tickets section
-        await expect(page.getByTestId("dev-tickets")).toBeVisible();
+        // Executive summary, recommendations, dev tickets may or may not be present
+        // depending on audit results (example.com scores 100/100 = no recommendations)
       }
 
-      // If empty state, verify the "no issues" message
+      // If empty state (no metrics available), verify the "no issues" message
       const empty = page.getByTestId("results-empty");
       if (await empty.isVisible()) {
         await expect(empty).toContainText("performing great");
