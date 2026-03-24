@@ -1,5 +1,5 @@
 import { AppError } from "../domain/errors.js";
-import type { AuditJob, AuditMetrics, AuditStatus } from "../domain/audit.js";
+import type { AuditJob, AuditMetrics, AuditStatus, AuditStrategy } from "../domain/audit.js";
 import {
   createAuditJob as createJob,
   getAuditJob,
@@ -31,8 +31,12 @@ export interface AuditStatusResult {
  * Delegates persistence to the Firestore adapter.
  * Triggers the audit worker asynchronously (fire-and-forget for MVP).
  */
-export async function createAudit(uid: string, url: string): Promise<CreateAuditResult> {
-  const job = await createJob(uid, url);
+export async function createAudit(
+  uid: string,
+  url: string,
+  strategy: AuditStrategy = "mobile"
+): Promise<CreateAuditResult> {
+  const job = await createJob(uid, url, strategy);
 
   // Fire-and-forget: worker processes in background (MVP — same process, no queue)
   void processAuditJob(job.jobId);

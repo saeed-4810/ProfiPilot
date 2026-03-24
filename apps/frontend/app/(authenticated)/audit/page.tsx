@@ -32,6 +32,7 @@ import {
   COPY_AUDIT_FAILED,
   COPY_AUDIT_COMPLETED,
   type AuditStatus,
+  type AuditStrategy,
   type RecentAuditItem,
 } from "@/lib/audit";
 
@@ -131,6 +132,7 @@ export default function AuditPage() {
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [progressStep, setProgressStep] = useState<number>(0);
+  const [strategy, setStrategy] = useState<AuditStrategy>("mobile");
 
   /* --- Recent audits state --- */
   const [recentAudits, setRecentAudits] = useState<RecentAuditItem[]>([]);
@@ -297,7 +299,7 @@ export default function AuditPage() {
       setProgressStep(0);
 
       try {
-        const result = await createAudit(parsed.data.url);
+        const result = await createAudit(parsed.data.url, strategy);
         setJobId(result.jobId);
         setAuditStatus(result.status);
         startPolling(result.jobId);
@@ -454,30 +456,115 @@ export default function AuditPage() {
                       </p>
                     )}
 
-                    {/* Engine settings row — Stitch: flex justify-between px-2 */}
-                    <div className="flex items-center justify-between px-2">
-                      <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                    {/* Engine Settings — Stitch-inspired panel */}
+                    <div data-testid="engine-settings">
+                      {/* Header row */}
+                      <div className="flex items-center justify-between px-2 mb-4">
+                        <div className="flex items-center gap-2 text-xs text-gray-500 font-medium uppercase tracking-wider">
                           <span className="material-symbols-outlined text-base" aria-hidden="true">
                             settings_input_component
                           </span>
                           <span>Engine Settings</span>
-                          <span className="material-symbols-outlined text-sm" aria-hidden="true">
-                            expand_more
+                        </div>
+                        <div className="flex items-center gap-4 text-[11px] text-gray-600">
+                          <span className="flex items-center gap-1">
+                            <span className="w-1 h-1 rounded-full bg-[#4ae176]" />
+                            Engine Ready
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs" aria-hidden="true">
+                              history
+                            </span>
+                            0 audits today
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4 text-[11px] text-gray-600">
-                        <span className="flex items-center gap-1">
-                          <span className="w-1 h-1 rounded-full bg-[#4ae176]" />
-                          Engine Ready
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <span className="material-symbols-outlined text-xs" aria-hidden="true">
-                            history
-                          </span>
-                          0 audits today
-                        </span>
+
+                      {/* Strategy toggle — 3 options */}
+                      <div className="grid grid-cols-3 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setStrategy("mobile")}
+                          data-testid="strategy-mobile"
+                          aria-pressed={strategy === "mobile"}
+                          className={`p-4 rounded-xl border text-left transition-all ${
+                            strategy === "mobile"
+                              ? "border-[#adc6ff]/30 bg-[#adc6ff]/5"
+                              : "border-white/[0.06] bg-[#18181a] hover:border-white/10"
+                          }`}
+                        >
+                          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">
+                            Analysis Profile
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-[#e5e2e3]">Mobile</span>
+                            <span
+                              className={`w-8 h-4 rounded-full flex items-center transition-colors ${
+                                strategy === "mobile"
+                                  ? "bg-[#4ae176] justify-end"
+                                  : "bg-gray-700 justify-start"
+                              }`}
+                            >
+                              <span className="w-3 h-3 rounded-full bg-white mx-0.5" />
+                            </span>
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setStrategy("desktop")}
+                          data-testid="strategy-desktop"
+                          aria-pressed={strategy === "desktop"}
+                          className={`p-4 rounded-xl border text-left transition-all ${
+                            strategy === "desktop"
+                              ? "border-[#adc6ff]/30 bg-[#adc6ff]/5"
+                              : "border-white/[0.06] bg-[#18181a] hover:border-white/10"
+                          }`}
+                        >
+                          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">
+                            Analysis Profile
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-[#e5e2e3]">Desktop</span>
+                            <span
+                              className={`w-8 h-4 rounded-full flex items-center transition-colors ${
+                                strategy === "desktop"
+                                  ? "bg-[#4ae176] justify-end"
+                                  : "bg-gray-700 justify-start"
+                              }`}
+                            >
+                              <span className="w-3 h-3 rounded-full bg-white mx-0.5" />
+                            </span>
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setStrategy("both")}
+                          data-testid="strategy-both"
+                          aria-pressed={strategy === "both"}
+                          className={`p-4 rounded-xl border text-left transition-all ${
+                            strategy === "both"
+                              ? "border-[#adc6ff]/30 bg-[#adc6ff]/5"
+                              : "border-white/[0.06] bg-[#18181a] hover:border-white/10"
+                          }`}
+                        >
+                          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">
+                            Analysis Profile
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-[#e5e2e3]">Both</span>
+                            <span
+                              className={`w-8 h-4 rounded-full flex items-center transition-colors ${
+                                strategy === "both"
+                                  ? "bg-[#4ae176] justify-end"
+                                  : "bg-gray-700 justify-start"
+                              }`}
+                            >
+                              <span className="w-3 h-3 rounded-full bg-white mx-0.5" />
+                            </span>
+                          </div>
+                        </button>
                       </div>
                     </div>
                   </div>

@@ -25,7 +25,7 @@ afterEach(() => {
 /* ------------------------------------------------------------------ */
 
 describe("createAudit", () => {
-  it("sends POST /audits with correct body and credentials", async () => {
+  it("sends POST /audits with correct body and credentials (default mobile)", async () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({ jobId: "job-123", status: "queued", createdAt: "2026-03-17T00:00:00Z" }),
@@ -37,13 +37,45 @@ describe("createAudit", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ url: "https://example.com" }),
+      body: JSON.stringify({ url: "https://example.com", strategy: "mobile" }),
     });
     expect(result).toEqual({
       jobId: "job-123",
       status: "queued",
       createdAt: "2026-03-17T00:00:00Z",
     });
+  });
+
+  it("sends strategy=desktop when specified", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ jobId: "job-456", status: "queued", createdAt: "2026-03-17T00:00:00Z" }),
+    });
+
+    await createAudit("https://example.com", "desktop");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:3001/audits",
+      expect.objectContaining({
+        body: JSON.stringify({ url: "https://example.com", strategy: "desktop" }),
+      })
+    );
+  });
+
+  it("sends strategy=both when specified", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ jobId: "job-789", status: "queued", createdAt: "2026-03-17T00:00:00Z" }),
+    });
+
+    await createAudit("https://example.com", "both");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:3001/audits",
+      expect.objectContaining({
+        body: JSON.stringify({ url: "https://example.com", strategy: "both" }),
+      })
+    );
   });
 
   it("throws with status and code on 400 validation error", async () => {

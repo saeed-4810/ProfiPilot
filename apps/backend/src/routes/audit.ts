@@ -26,7 +26,7 @@ auditRouter.post(
 
     try {
       const uid = (req as Request & { uid: string }).uid;
-      const result = await createAudit(uid, parsed.data.url);
+      const result = await createAudit(uid, parsed.data.url, parsed.data.strategy);
       res.status(202).json(result);
     } catch (err) {
       if (err instanceof AppError) {

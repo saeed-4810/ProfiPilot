@@ -1,6 +1,11 @@
 import { AppError } from "../domain/errors.js";
 import { AuditStatus } from "../domain/audit.js";
-import { getAuditJob, updateAuditStatus, updateAuditMetrics } from "../adapters/firestore-audit.js";
+import {
+  getAuditJob,
+  updateAuditStatus,
+  updateAuditMetrics,
+  updateAuditDesktopMetrics,
+} from "../adapters/firestore-audit.js";
 import { fetchPageSpeedData } from "../lib/psi-client.js";
 import { parsePSIResponse } from "./metrics-parser.js";
 
@@ -104,13 +109,23 @@ export async function processAuditJob(jobId: string): Promise<void> {
       }
 
       // Step 3: Call PSI API
-      const psiResponse = await fetchPageSpeedData(job.url, job.strategy);
+      if (job.strategy === "both") {
+        // "both" strategy: run mobile first, then desktop
+        const mobileResponse = await fetchPageSpeedData(job.url, "mobile");
+        const mobileMetrics = parsePSIResponse(mobileResponse);
+        await updateAuditMetrics(jobId, mobileMetrics);
 
-      // Step 4: Parse response
-      const metrics = parsePSIResponse(psiResponse);
+        // Rate limit delay between calls (1 req/sec)
+        await sleep(RATE_LIMIT_DELAY_MS);
 
-      // Step 5: Store metrics in Firestore
-      await updateAuditMetrics(jobId, metrics);
+        const desktopResponse = await fetchPageSpeedData(job.url, "desktop");
+        const desktopMetrics = parsePSIResponse(desktopResponse);
+        await updateAuditDesktopMetrics(jobId, desktopMetrics);
+      } else {
+        const psiResponse = await fetchPageSpeedData(job.url, job.strategy);
+        const metrics = parsePSIResponse(psiResponse);
+        await updateAuditMetrics(jobId, metrics);
+      }
 
       // Step 6: Update status to completed
       await updateAuditStatus(jobId, AuditStatus.COMPLETED);

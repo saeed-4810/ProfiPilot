@@ -152,6 +152,60 @@ describe("T-PERF-100-002: POST /audits (invalid URL)", () => {
   });
 });
 
+// PERF-155: POST /audits with strategy parameter
+describe("PERF-155: POST /audits with strategy", () => {
+  it("accepts strategy=mobile and returns 202", async () => {
+    const res = await request(app)
+      .post("/audits")
+      .set("Cookie", "__session=valid-session")
+      .send({ url: "https://example.com", strategy: "mobile" });
+
+    expect(res.status).toBe(202);
+    expect(res.body.jobId).toBeDefined();
+  });
+
+  it("accepts strategy=desktop and returns 202", async () => {
+    const res = await request(app)
+      .post("/audits")
+      .set("Cookie", "__session=valid-session")
+      .send({ url: "https://example.com", strategy: "desktop" });
+
+    expect(res.status).toBe(202);
+    expect(res.body.jobId).toBeDefined();
+  });
+
+  it("accepts strategy=both and returns 202", async () => {
+    const res = await request(app)
+      .post("/audits")
+      .set("Cookie", "__session=valid-session")
+      .send({ url: "https://example.com", strategy: "both" });
+
+    expect(res.status).toBe(202);
+    expect(res.body.jobId).toBeDefined();
+  });
+
+  it("defaults to mobile when strategy is not provided", async () => {
+    const res = await request(app)
+      .post("/audits")
+      .set("Cookie", "__session=valid-session")
+      .send({ url: "https://example.com" });
+
+    expect(res.status).toBe(202);
+    // Strategy defaults to "mobile" — verified by the Firestore set call
+    expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({ strategy: "mobile" }));
+  });
+
+  it("rejects invalid strategy value with 400", async () => {
+    const res = await request(app)
+      .post("/audits")
+      .set("Cookie", "__session=valid-session")
+      .send({ url: "https://example.com", strategy: "invalid" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("VALIDATION_ERROR");
+  });
+});
+
 // T-PERF-100-003: POST /audits without auth → 401 ErrorEnvelope
 describe("T-PERF-100-003: POST /audits (no auth)", () => {
   it("returns 401 when no session cookie is present", async () => {

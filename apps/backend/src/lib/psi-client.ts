@@ -1,5 +1,5 @@
 import { AppError } from "../domain/errors.js";
-import type { AuditStrategy } from "../domain/audit.js";
+import type { PSIStrategy } from "../domain/audit.js";
 
 /** Timeout for PSI API requests per ADR-012 (30 seconds). */
 const PSI_TIMEOUT_MS = 30_000;
@@ -62,10 +62,7 @@ interface PSIErrorResponse {
  *
  * @throws AppError with appropriate status for API failures per ADR-012 error matrix.
  */
-export async function fetchPageSpeedData(
-  url: string,
-  strategy: AuditStrategy
-): Promise<PSIResponse> {
+export async function fetchPageSpeedData(url: string, strategy: PSIStrategy): Promise<PSIResponse> {
   const apiKey = process.env["PAGESPEED_API_KEY"] ?? "";
 
   const params = new URLSearchParams({

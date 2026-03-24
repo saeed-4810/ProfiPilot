@@ -178,3 +178,17 @@ export async function updateAuditMetrics(jobId: string, metrics: AuditMetrics): 
     updatedAt: now,
   });
 }
+
+/** Write desktop metrics for "both" strategy audits. */
+export async function updateAuditDesktopMetrics(
+  jobId: string,
+  desktopMetrics: AuditMetrics
+): Promise<void> {
+  const firestore = getFirebaseApp().firestore();
+  const now = new Date().toISOString();
+
+  await firestore.collection(COLLECTION).doc(jobId).update({
+    desktopMetrics,
+    updatedAt: now,
+  });
+}

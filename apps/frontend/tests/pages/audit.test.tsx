@@ -81,7 +81,7 @@ describe("P-PERF-100-001: Submit valid URL → job created, progress indicator s
     await submitUrl(user, "https://example.com");
 
     await waitFor(() => {
-      expect(mockCreateAudit).toHaveBeenCalledWith("https://example.com");
+      expect(mockCreateAudit).toHaveBeenCalledWith("https://example.com", "mobile");
       expect(screen.getByTestId("audit-progress")).toBeInTheDocument();
       // PERF-142: spinner is now inside AuditProgress stepper
       expect(screen.getByTestId("audit-progress-stepper")).toBeInTheDocument();
@@ -437,7 +437,7 @@ describe("T-PERF-100-001: POST /audits returns 202 with jobId", () => {
     await submitUrl(user, "https://example.com");
 
     await waitFor(() => {
-      expect(mockCreateAudit).toHaveBeenCalledWith("https://example.com");
+      expect(mockCreateAudit).toHaveBeenCalledWith("https://example.com", "mobile");
       expect(screen.getByTestId("audit-job-id")).toHaveTextContent("Job: job-202");
     });
   });
@@ -877,6 +877,115 @@ describe("PERF-142: Step timer caps at penultimate step", () => {
       const liveRegion = screen.getByTestId("audit-progress-live");
       expect(liveRegion).toHaveTextContent("Step 4 of 5: Analyzing results with AI...");
     });
+  });
+});
+
+/* ================================================================== */
+/* PERF-155: Engine Settings — strategy toggle                         */
+/* ================================================================== */
+
+describe("PERF-155: Engine Settings strategy toggle", () => {
+  it("renders engine settings panel", () => {
+    render(<AuditPage />);
+    expect(screen.getByTestId("engine-settings")).toBeInTheDocument();
+    expect(screen.getByText("Engine Settings")).toBeInTheDocument();
+  });
+
+  it("renders three strategy buttons: Mobile, Desktop, Both", () => {
+    render(<AuditPage />);
+    expect(screen.getByTestId("strategy-mobile")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-desktop")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-both")).toBeInTheDocument();
+  });
+
+  it("defaults to Mobile strategy selected", () => {
+    render(<AuditPage />);
+    expect(screen.getByTestId("strategy-mobile")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("strategy-desktop")).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("strategy-both")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("selects Desktop strategy when clicked", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<AuditPage />);
+
+    await user.click(screen.getByTestId("strategy-desktop"));
+
+    expect(screen.getByTestId("strategy-desktop")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("strategy-mobile")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("selects Both strategy when clicked", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<AuditPage />);
+
+    await user.click(screen.getByTestId("strategy-both"));
+
+    expect(screen.getByTestId("strategy-both")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("strategy-mobile")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("sends selected strategy with audit submission", async () => {
+    mockCreateAudit.mockResolvedValue({
+      jobId: "job-strat",
+      status: "queued",
+      createdAt: new Date().toISOString(),
+    });
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<AuditPage />);
+
+    // Select desktop strategy
+    await user.click(screen.getByTestId("strategy-desktop"));
+
+    // Fill URL and submit
+    const input = screen.getByTestId("audit-url-input");
+    await user.clear(input);
+    await user.type(input, "https://example.com");
+    await user.click(screen.getByTestId("audit-submit"));
+
+    await waitFor(() => {
+      expect(mockCreateAudit).toHaveBeenCalledWith("https://example.com", "desktop");
+    });
+  });
+
+  it("sends mobile strategy by default with audit submission", async () => {
+    mockCreateAudit.mockResolvedValue({
+      jobId: "job-default",
+      status: "queued",
+      createdAt: new Date().toISOString(),
+    });
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<AuditPage />);
+
+    const input = screen.getByTestId("audit-url-input");
+    await user.clear(input);
+    await user.type(input, "https://example.com");
+    await user.click(screen.getByTestId("audit-submit"));
+
+    await waitFor(() => {
+      expect(mockCreateAudit).toHaveBeenCalledWith("https://example.com", "mobile");
+    });
+  });
+
+  it("can switch back to Mobile after selecting another strategy", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<AuditPage />);
+
+    // Switch to desktop
+    await user.click(screen.getByTestId("strategy-desktop"));
+    expect(screen.getByTestId("strategy-desktop")).toHaveAttribute("aria-pressed", "true");
+
+    // Switch back to mobile
+    await user.click(screen.getByTestId("strategy-mobile"));
+    expect(screen.getByTestId("strategy-mobile")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("strategy-desktop")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("shows Engine Ready status indicator", () => {
+    render(<AuditPage />);
+    expect(screen.getByText("Engine Ready")).toBeInTheDocument();
   });
 });
 

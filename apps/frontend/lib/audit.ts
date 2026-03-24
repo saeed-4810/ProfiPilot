@@ -10,6 +10,9 @@ export interface CreateAuditResponse {
 /** Audit job status values per ADR-006 state machine. */
 export type AuditStatus = "queued" | "running" | "retrying" | "completed" | "failed" | "cancelled";
 
+/** Audit strategy — matches backend AuditStrategy type. */
+export type AuditStrategy = "mobile" | "desktop" | "both";
+
 /** Raw CWV metrics from the audit status response. */
 export interface AuditMetrics {
   lcp: number | null;
@@ -46,16 +49,19 @@ export interface ApiError {
 }
 
 /**
- * Create a new audit job by submitting a URL.
+ * Create a new audit job by submitting a URL with optional strategy.
  * POST /audits with session cookie (credentials: "include").
  * Returns 202 with jobId on success.
  */
-export async function createAudit(url: string): Promise<CreateAuditResponse> {
+export async function createAudit(
+  url: string,
+  strategy: AuditStrategy = "mobile"
+): Promise<CreateAuditResponse> {
   const response = await fetch(`${API_BASE}/audits`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, strategy }),
   });
 
   if (!response.ok) {
