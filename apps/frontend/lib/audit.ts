@@ -114,14 +114,20 @@ export interface RecentAuditItem {
 /** Response shape from GET /audits/recent. */
 export interface RecentAuditsResponse {
   items: RecentAuditItem[];
+  page: number;
+  size: number;
+  total: number;
 }
 
 /**
- * Fetch recent audit jobs for the authenticated user.
+ * Fetch recent audit jobs for the authenticated user with pagination.
  * GET /audits/recent with session cookie (credentials: "include").
  */
-export async function getRecentAudits(limit: number = 5): Promise<RecentAuditsResponse> {
-  const response = await fetch(`${API_BASE}/audits/recent?limit=${limit}`, {
+export async function getRecentAudits(
+  page: number = 1,
+  size: number = 5
+): Promise<RecentAuditsResponse> {
+  const response = await fetch(`${API_BASE}/audits/recent?page=${page}&size=${size}`, {
     method: "GET",
     headers: { "Content-Type": "application/json" },
     credentials: "include",

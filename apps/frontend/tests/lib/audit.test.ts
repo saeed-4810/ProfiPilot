@@ -215,39 +215,41 @@ describe("TERMINAL_STATUSES", () => {
 /* ------------------------------------------------------------------ */
 
 describe("getRecentAudits", () => {
-  it("sends GET /audits/recent with credentials and default limit", async () => {
+  it("sends GET /audits/recent with credentials and default pagination", async () => {
     mockFetch.mockResolvedValue({
       ok: true,
-      json: async () => ({ items: [] }),
+      json: async () => ({ items: [], page: 1, size: 5, total: 0 }),
     });
 
     const result = await getRecentAudits();
 
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining("/audits/recent?limit=5"),
+      expect.stringContaining("/audits/recent?page=1&size=5"),
       expect.objectContaining({
         method: "GET",
         credentials: "include",
       })
     );
     expect(result.items).toEqual([]);
+    expect(result.page).toBe(1);
+    expect(result.total).toBe(0);
   });
 
-  it("sends custom limit when provided", async () => {
+  it("sends custom page and size when provided", async () => {
     mockFetch.mockResolvedValue({
       ok: true,
-      json: async () => ({ items: [] }),
+      json: async () => ({ items: [], page: 2, size: 10, total: 15 }),
     });
 
-    await getRecentAudits(10);
+    await getRecentAudits(2, 10);
 
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining("/audits/recent?limit=10"),
+      expect.stringContaining("/audits/recent?page=2&size=10"),
       expect.anything()
     );
   });
 
-  it("returns items with correct shape", async () => {
+  it("returns items with correct shape and pagination", async () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -261,6 +263,9 @@ describe("getRecentAudits", () => {
             completedAt: "2026-03-20T10:01:00Z",
           },
         ],
+        page: 1,
+        size: 5,
+        total: 1,
       }),
     });
 
@@ -273,6 +278,8 @@ describe("getRecentAudits", () => {
       status: "completed",
       performanceScore: 0.95,
     });
+    expect(result.page).toBe(1);
+    expect(result.total).toBe(1);
   });
 
   it("throws error with status and code on non-ok response", async () => {

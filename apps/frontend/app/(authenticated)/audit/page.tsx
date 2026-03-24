@@ -135,6 +135,9 @@ export default function AuditPage() {
   /* --- Recent audits state --- */
   const [recentAudits, setRecentAudits] = useState<RecentAuditItem[]>([]);
   const [recentLoading, setRecentLoading] = useState(true);
+  const [recentPage, setRecentPage] = useState(1);
+  const [recentTotal, setRecentTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   /* --- Refs --- */
   const urlInputRef = useRef<HTMLInputElement>(null);
@@ -184,9 +187,13 @@ export default function AuditPage() {
   useEffect(() => {
     let cancelled = false;
     setRecentLoading(true);
-    getRecentAudits(5)
+    getRecentAudits(1, 5)
       .then((res) => {
-        if (!cancelled) setRecentAudits(res.items);
+        if (!cancelled) {
+          setRecentAudits(res.items);
+          setRecentTotal(res.total);
+          setRecentPage(1);
+        }
       })
       .catch(() => {
         /* Silently fail — recent audits is non-critical UI */
@@ -198,6 +205,24 @@ export default function AuditPage() {
       cancelled = true;
     };
   }, []);
+
+  /* --- Load more recent audits --- */
+  const handleLoadMore = useCallback(() => {
+    const nextPage = recentPage + 1;
+    setLoadingMore(true);
+    getRecentAudits(nextPage, 5)
+      .then((res) => {
+        setRecentAudits((prev) => [...prev, ...res.items]);
+        setRecentTotal(res.total);
+        setRecentPage(nextPage);
+      })
+      .catch(() => {
+        /* Silently fail */
+      })
+      .finally(() => {
+        setLoadingMore(false);
+      });
+  }, [recentPage]);
 
   /* --- Pre-fill URL from query param --- */
   useEffect(() => {
@@ -583,7 +608,7 @@ export default function AuditPage() {
                               <span
                                 className={`font-medium ${getScoreColor(audit.performanceScore)}`}
                               >
-                                {Math.round(audit.performanceScore * 100)} Performance
+                                Score {Math.round(audit.performanceScore * 100)}
                               </span>
                             </>
                           )}
@@ -608,6 +633,21 @@ export default function AuditPage() {
                   </div>
                 ))}
             </div>
+
+            {/* Load more button — shown when more items exist */}
+            {!recentLoading && recentAudits.length < recentTotal && (
+              <div className="mt-6 flex justify-center">
+                <button
+                  type="button"
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  data-testid="recent-load-more"
+                  className="text-[11px] uppercase tracking-widest text-gray-500 hover:text-white transition-colors disabled:opacity-50"
+                >
+                  {loadingMore ? "Loading..." : "Load more"}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

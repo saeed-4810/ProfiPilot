@@ -131,18 +131,30 @@ export async function getLastCompletedAuditByUrl(
 /* v8 ignore stop */
 
 /**
- * Get recent audit jobs for a user, ordered by createdAt descending.
+ * Get paginated audit jobs for a user, ordered by createdAt descending.
  * Uses the composite index: audits(uid ASC, createdAt DESC).
  * Applies safeParse to silently skip corrupt documents (ADR-021, W5).
+ * Returns audits + total count for pagination.
  */
-export async function getAuditsByUser(uid: string, limit: number): Promise<AuditJob[]> {
+export async function getAuditsByUser(
+  uid: string,
+  page: number,
+  size: number
+): Promise<{ audits: AuditJob[]; total: number }> {
   const firestore = getFirebaseApp().firestore();
+  const collectionRef = firestore.collection(COLLECTION);
 
-  const snapshot = await firestore
-    .collection(COLLECTION)
+  // Count total documents for this user
+  const allDocs = await collectionRef.where("uid", "==", uid).get();
+  const total = allDocs.size;
+
+  // Fetch paginated results ordered by createdAt descending
+  const offset = (page - 1) * size;
+  const snapshot = await collectionRef
     .where("uid", "==", uid)
     .orderBy("createdAt", "desc")
-    .limit(limit)
+    .offset(offset)
+    .limit(size)
     .get();
 
   const audits: AuditJob[] = [];
@@ -153,7 +165,7 @@ export async function getAuditsByUser(uid: string, limit: number): Promise<Audit
     }
   }
 
-  return audits;
+  return { audits, total };
 }
 
 /** Write parsed CWV metrics to the audit document's metrics subdocument per ADR-012. */

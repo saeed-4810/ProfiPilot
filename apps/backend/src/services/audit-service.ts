@@ -84,14 +84,21 @@ export interface RecentAuditItem {
 /** Response shape for GET /audits/recent. */
 export interface RecentAuditsResult {
   items: RecentAuditItem[];
+  page: number;
+  size: number;
+  total: number;
 }
 
 /**
- * List recent audit jobs for the authenticated user.
- * Returns a flat list of recent audits with URL, status, score, and timestamps.
+ * List recent audit jobs for the authenticated user with pagination.
+ * Returns paginated audits with URL, status, score, timestamps, and total count.
  */
-export async function listRecentAudits(uid: string, limit: number): Promise<RecentAuditsResult> {
-  const audits = await getAuditsByUser(uid, limit);
+export async function listRecentAudits(
+  uid: string,
+  page: number,
+  size: number
+): Promise<RecentAuditsResult> {
+  const { audits, total } = await getAuditsByUser(uid, page, size);
 
   const items: RecentAuditItem[] = audits.map((job) => ({
     jobId: job.jobId,
@@ -102,5 +109,5 @@ export async function listRecentAudits(uid: string, limit: number): Promise<Rece
     ...(job.completedAt !== undefined ? { completedAt: job.completedAt } : {}),
   }));
 
-  return { items };
+  return { items, page, size, total };
 }

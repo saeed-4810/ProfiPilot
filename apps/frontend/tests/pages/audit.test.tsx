@@ -28,12 +28,18 @@ vi.mock("@/lib/audit", async (importOriginal) => {
 
 // Import after mocks
 import AuditPage from "../../app/(authenticated)/audit/page";
+import type { RecentAuditItem } from "../../lib/audit";
+
+/** Helper: wrap items in paginated response shape. */
+function recentResponse(items: RecentAuditItem[], total?: number) {
+  return { items, page: 1, size: 5, total: total ?? items.length };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers({ shouldAdvanceTime: true });
-  // Default: recent audits returns empty list
-  mockGetRecentAudits.mockResolvedValue({ items: [] });
+  // Default: recent audits returns empty list with pagination
+  mockGetRecentAudits.mockResolvedValue({ items: [], page: 1, size: 5, total: 0 });
 });
 
 afterEach(() => {
@@ -880,17 +886,14 @@ describe("PERF-142: Step timer caps at penultimate step", () => {
 
 describe("PERF-155: Recent audits section", () => {
   it("shows loading skeleton while fetching recent audits", () => {
-    // Never resolves — stays in loading state
     mockGetRecentAudits.mockReturnValue(new Promise(() => {}));
     render(<AuditPage />);
-
     expect(screen.getByTestId("recent-loading")).toBeInTheDocument();
   });
 
   it("shows empty state when no recent audits exist", async () => {
-    mockGetRecentAudits.mockResolvedValue({ items: [] });
+    mockGetRecentAudits.mockResolvedValue(recentResponse([]));
     render(<AuditPage />);
-
     await waitFor(() => {
       expect(screen.getByTestId("recent-empty")).toBeInTheDocument();
       expect(
@@ -899,15 +902,15 @@ describe("PERF-155: Recent audits section", () => {
     });
   });
 
-  it("renders recent audit rows with URL and score", async () => {
-    mockGetRecentAudits.mockResolvedValue({
-      items: [
+  it("renders recent audit rows with URL and Score label", async () => {
+    mockGetRecentAudits.mockResolvedValue(
+      recentResponse([
         {
           jobId: "job-recent-1",
           url: "https://example.com/page",
           status: "completed",
           performanceScore: 0.98,
-          createdAt: new Date(Date.now() - 7_200_000).toISOString(), // 2 hours ago
+          createdAt: new Date(Date.now() - 7_200_000).toISOString(),
           completedAt: new Date(Date.now() - 7_100_000).toISOString(),
         },
         {
@@ -915,30 +918,24 @@ describe("PERF-155: Recent audits section", () => {
           url: "https://other.com",
           status: "failed",
           performanceScore: null,
-          createdAt: new Date(Date.now() - 86_400_000).toISOString(), // 1 day ago
+          createdAt: new Date(Date.now() - 86_400_000).toISOString(),
         },
-      ],
-    });
-
+      ])
+    );
     render(<AuditPage />);
-
     await waitFor(() => {
       expect(screen.getByTestId("recent-audit-job-recent-1")).toBeInTheDocument();
       expect(screen.getByTestId("recent-audit-job-recent-2")).toBeInTheDocument();
     });
-
-    // Check URL display (protocol stripped)
     expect(screen.getByText("example.com/page")).toBeInTheDocument();
     expect(screen.getByText("other.com")).toBeInTheDocument();
-
-    // Check score display
-    expect(screen.getByText("98 Performance")).toBeInTheDocument();
+    expect(screen.getByText("Score 98")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
   });
 
   it("navigates to results when clicking a completed audit", async () => {
-    mockGetRecentAudits.mockResolvedValue({
-      items: [
+    mockGetRecentAudits.mockResolvedValue(
+      recentResponse([
         {
           jobId: "job-click",
           url: "https://example.com",
@@ -947,24 +944,20 @@ describe("PERF-155: Recent audits section", () => {
           createdAt: new Date().toISOString(),
           completedAt: new Date().toISOString(),
         },
-      ],
-    });
-
+      ])
+    );
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<AuditPage />);
-
     await waitFor(() => {
       expect(screen.getByTestId("recent-audit-job-click")).toBeInTheDocument();
     });
-
     await user.click(screen.getByTestId("recent-audit-job-click"));
-
     expect(mockPush).toHaveBeenCalledWith("/results?id=job-click");
   });
 
   it("shows in-progress label for queued/running audits", async () => {
-    mockGetRecentAudits.mockResolvedValue({
-      items: [
+    mockGetRecentAudits.mockResolvedValue(
+      recentResponse([
         {
           jobId: "job-running",
           url: "https://running.com",
@@ -972,11 +965,9 @@ describe("PERF-155: Recent audits section", () => {
           performanceScore: null,
           createdAt: new Date().toISOString(),
         },
-      ],
-    });
-
+      ])
+    );
     render(<AuditPage />);
-
     await waitFor(() => {
       expect(screen.getByText("In progress")).toBeInTheDocument();
     });
@@ -985,16 +976,14 @@ describe("PERF-155: Recent audits section", () => {
   it("silently handles fetch error for recent audits", async () => {
     mockGetRecentAudits.mockRejectedValue(new Error("Network error"));
     render(<AuditPage />);
-
-    // Should show empty state after error (not crash)
     await waitFor(() => {
       expect(screen.getByTestId("recent-empty")).toBeInTheDocument();
     });
   });
 
   it("navigates to results via keyboard Enter on completed audit", async () => {
-    mockGetRecentAudits.mockResolvedValue({
-      items: [
+    mockGetRecentAudits.mockResolvedValue(
+      recentResponse([
         {
           jobId: "job-kb",
           url: "https://kb.com",
@@ -1003,25 +992,19 @@ describe("PERF-155: Recent audits section", () => {
           createdAt: new Date().toISOString(),
           completedAt: new Date().toISOString(),
         },
-      ],
-    });
-
+      ])
+    );
     render(<AuditPage />);
-
     await waitFor(() => {
       expect(screen.getByTestId("recent-audit-job-kb")).toBeInTheDocument();
     });
-
-    const row = screen.getByTestId("recent-audit-job-kb");
-    row.focus();
-    fireEvent.keyDown(row, { key: "Enter" });
-
+    fireEvent.keyDown(screen.getByTestId("recent-audit-job-kb"), { key: "Enter" });
     expect(mockPush).toHaveBeenCalledWith("/results?id=job-kb");
   });
 
   it("navigates to results via keyboard Space on completed audit", async () => {
-    mockGetRecentAudits.mockResolvedValue({
-      items: [
+    mockGetRecentAudits.mockResolvedValue(
+      recentResponse([
         {
           jobId: "job-sp",
           url: "https://sp.com",
@@ -1030,25 +1013,19 @@ describe("PERF-155: Recent audits section", () => {
           createdAt: new Date().toISOString(),
           completedAt: new Date().toISOString(),
         },
-      ],
-    });
-
+      ])
+    );
     render(<AuditPage />);
-
     await waitFor(() => {
       expect(screen.getByTestId("recent-audit-job-sp")).toBeInTheDocument();
     });
-
-    const row = screen.getByTestId("recent-audit-job-sp");
-    row.focus();
-    fireEvent.keyDown(row, { key: " " });
-
+    fireEvent.keyDown(screen.getByTestId("recent-audit-job-sp"), { key: " " });
     expect(mockPush).toHaveBeenCalledWith("/results?id=job-sp");
   });
 
   it("does not navigate on keyboard for non-completed audit", async () => {
-    mockGetRecentAudits.mockResolvedValue({
-      items: [
+    mockGetRecentAudits.mockResolvedValue(
+      recentResponse([
         {
           jobId: "job-nc",
           url: "https://nc.com",
@@ -1056,108 +1033,95 @@ describe("PERF-155: Recent audits section", () => {
           performanceScore: null,
           createdAt: new Date().toISOString(),
         },
-      ],
-    });
-
+      ])
+    );
     render(<AuditPage />);
-
     await waitFor(() => {
       expect(screen.getByTestId("recent-audit-job-nc")).toBeInTheDocument();
     });
-
-    const row = screen.getByTestId("recent-audit-job-nc");
-    fireEvent.keyDown(row, { key: "Enter" });
-
+    fireEvent.keyDown(screen.getByTestId("recent-audit-job-nc"), { key: "Enter" });
     expect(mockPush).not.toHaveBeenCalled();
   });
 
   it("renders 'Just now' for very recent audits", async () => {
-    mockGetRecentAudits.mockResolvedValue({
-      items: [
+    mockGetRecentAudits.mockResolvedValue(
+      recentResponse([
         {
           jobId: "job-now",
           url: "https://now.com",
           status: "completed",
           performanceScore: 0.99,
-          createdAt: new Date(Date.now() - 10_000).toISOString(), // 10 seconds ago
+          createdAt: new Date(Date.now() - 10_000).toISOString(),
           completedAt: new Date(Date.now() - 5_000).toISOString(),
         },
-      ],
-    });
-
+      ])
+    );
     render(<AuditPage />);
-
     await waitFor(() => {
       expect(screen.getByText(/Just now/)).toBeInTheDocument();
     });
   });
 
   it("renders 'X min ago' for audits from minutes ago", async () => {
-    mockGetRecentAudits.mockResolvedValue({
-      items: [
+    mockGetRecentAudits.mockResolvedValue(
+      recentResponse([
         {
           jobId: "job-min",
           url: "https://min.com",
           status: "completed",
           performanceScore: 0.88,
-          createdAt: new Date(Date.now() - 15 * 60_000).toISOString(), // 15 min ago
+          createdAt: new Date(Date.now() - 15 * 60_000).toISOString(),
           completedAt: new Date(Date.now() - 14 * 60_000).toISOString(),
         },
-      ],
-    });
-
+      ])
+    );
     render(<AuditPage />);
-
     await waitFor(() => {
       expect(screen.getByText(/15 min ago/)).toBeInTheDocument();
     });
   });
 
   it("renders 'X hours ago' for audits from hours ago", async () => {
-    mockGetRecentAudits.mockResolvedValue({
-      items: [
+    mockGetRecentAudits.mockResolvedValue(
+      recentResponse([
         {
           jobId: "job-hr",
           url: "https://hr.com",
           status: "completed",
           performanceScore: 0.76,
-          createdAt: new Date(Date.now() - 3 * 3_600_000).toISOString(), // 3 hours ago
+          createdAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
           completedAt: new Date(Date.now() - 3 * 3_600_000 + 60_000).toISOString(),
         },
-      ],
-    });
-
+      ])
+    );
     render(<AuditPage />);
-
     await waitFor(() => {
       expect(screen.getByText(/3 hours ago/)).toBeInTheDocument();
     });
   });
 
   it("renders '1 hour ago' (singular) for audits from 1 hour ago", async () => {
-    mockGetRecentAudits.mockResolvedValue({
-      items: [
+    mockGetRecentAudits.mockResolvedValue(
+      recentResponse([
         {
           jobId: "job-1hr",
           url: "https://onehr.com",
           status: "completed",
           performanceScore: 0.91,
-          createdAt: new Date(Date.now() - 3_600_000).toISOString(), // 1 hour ago
+          createdAt: new Date(Date.now() - 3_600_000).toISOString(),
           completedAt: new Date(Date.now() - 3_500_000).toISOString(),
         },
-      ],
-    });
-
+      ])
+    );
     render(<AuditPage />);
-
     await waitFor(() => {
       expect(screen.getByText(/1 hour ago/)).toBeInTheDocument();
     });
   });
 
   it("renders 'Yesterday' for audits from 1 day ago", async () => {
-    mockGetRecentAudits.mockResolvedValue({
-      items: [
+    mockGetRecentAudits.mockResolvedValue(
+      recentResponse([
         {
           jobId: "job-yday",
           url: "https://yesterday.com",
@@ -1166,19 +1130,17 @@ describe("PERF-155: Recent audits section", () => {
           createdAt: new Date(Date.now() - 86_400_000).toISOString(),
           completedAt: new Date(Date.now() - 86_300_000).toISOString(),
         },
-      ],
-    });
-
+      ])
+    );
     render(<AuditPage />);
-
     await waitFor(() => {
       expect(screen.getByText(/Yesterday/)).toBeInTheDocument();
     });
   });
 
   it("renders 'X days ago' for audits older than 1 day", async () => {
-    mockGetRecentAudits.mockResolvedValue({
-      items: [
+    mockGetRecentAudits.mockResolvedValue(
+      recentResponse([
         {
           jobId: "job-old",
           url: "https://old.com",
@@ -1187,19 +1149,17 @@ describe("PERF-155: Recent audits section", () => {
           createdAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
           completedAt: new Date(Date.now() - 3 * 86_400_000 + 60_000).toISOString(),
         },
-      ],
-    });
-
+      ])
+    );
     render(<AuditPage />);
-
     await waitFor(() => {
       expect(screen.getByText(/3 days ago/)).toBeInTheDocument();
     });
   });
 
   it("does not navigate on click for non-completed audit", async () => {
-    mockGetRecentAudits.mockResolvedValue({
-      items: [
+    mockGetRecentAudits.mockResolvedValue(
+      recentResponse([
         {
           jobId: "job-fail-click",
           url: "https://fail.com",
@@ -1207,18 +1167,140 @@ describe("PERF-155: Recent audits section", () => {
           performanceScore: null,
           createdAt: new Date().toISOString(),
         },
+      ])
+    );
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<AuditPage />);
+    await waitFor(() => {
+      expect(screen.getByTestId("recent-audit-job-fail-click")).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId("recent-audit-job-fail-click"));
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("shows 'Load more' button when more items exist", async () => {
+    mockGetRecentAudits.mockResolvedValue({
+      items: [
+        {
+          jobId: "job-1",
+          url: "https://a.com",
+          status: "completed",
+          performanceScore: 0.9,
+          createdAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+        },
       ],
+      page: 1,
+      size: 5,
+      total: 8,
+    });
+    render(<AuditPage />);
+    await waitFor(() => {
+      expect(screen.getByTestId("recent-load-more")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("recent-load-more")).toHaveTextContent("Load more");
+  });
+
+  it("does not show 'Load more' when all items are loaded", async () => {
+    mockGetRecentAudits.mockResolvedValue(
+      recentResponse([
+        {
+          jobId: "job-1",
+          url: "https://a.com",
+          status: "completed",
+          performanceScore: 0.9,
+          createdAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+        },
+      ])
+    );
+    render(<AuditPage />);
+    await waitFor(() => {
+      expect(screen.getByTestId("recent-audit-job-1")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("recent-load-more")).not.toBeInTheDocument();
+  });
+
+  it("loads more items when 'Load more' is clicked", async () => {
+    // First call: page 1 with 1 item, total 2
+    mockGetRecentAudits.mockResolvedValueOnce({
+      items: [
+        {
+          jobId: "job-p1",
+          url: "https://p1.com",
+          status: "completed",
+          performanceScore: 0.8,
+          createdAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+        },
+      ],
+      page: 1,
+      size: 5,
+      total: 2,
+    });
+    // Second call: page 2 with 1 more item
+    mockGetRecentAudits.mockResolvedValueOnce({
+      items: [
+        {
+          jobId: "job-p2",
+          url: "https://p2.com",
+          status: "completed",
+          performanceScore: 0.7,
+          createdAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+        },
+      ],
+      page: 2,
+      size: 5,
+      total: 2,
     });
 
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<AuditPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("recent-audit-job-fail-click")).toBeInTheDocument();
+      expect(screen.getByTestId("recent-load-more")).toBeInTheDocument();
     });
+    await user.click(screen.getByTestId("recent-load-more"));
 
-    await user.click(screen.getByTestId("recent-audit-job-fail-click"));
+    await waitFor(() => {
+      expect(screen.getByTestId("recent-audit-job-p1")).toBeInTheDocument();
+      expect(screen.getByTestId("recent-audit-job-p2")).toBeInTheDocument();
+    });
+    // Second call should be page 2
+    expect(mockGetRecentAudits).toHaveBeenCalledWith(2, 5);
+  });
 
-    expect(mockPush).not.toHaveBeenCalled();
+  it("silently handles error when loading more", async () => {
+    mockGetRecentAudits.mockResolvedValueOnce({
+      items: [
+        {
+          jobId: "job-err",
+          url: "https://err.com",
+          status: "completed",
+          performanceScore: 0.5,
+          createdAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+        },
+      ],
+      page: 1,
+      size: 5,
+      total: 10,
+    });
+    // Second call fails
+    mockGetRecentAudits.mockRejectedValueOnce(new Error("Network error"));
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<AuditPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("recent-load-more")).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId("recent-load-more"));
+
+    // Should not crash — original items still visible
+    await waitFor(() => {
+      expect(screen.getByTestId("recent-audit-job-err")).toBeInTheDocument();
+    });
   });
 });

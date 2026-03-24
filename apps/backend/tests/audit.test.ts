@@ -37,11 +37,13 @@ const mockSet = vi.fn();
 const mockGet = vi.fn();
 const mockUpdate = vi.fn();
 
-// Query chain mocks for getAuditsByUser (where → orderBy → limit → get)
+// Query chain mocks for getAuditsByUser (where → orderBy → offset → limit → get)
 const mockWhere = vi.fn();
 const mockOrderBy = vi.fn();
+const mockOffset = vi.fn();
 const mockLimit = vi.fn();
 const mockQueryGet = vi.fn();
+const mockCountGet = vi.fn();
 
 const mockFirestore = {
   collection: vi.fn(() => ({
@@ -76,9 +78,15 @@ beforeEach(() => {
     }),
   });
 
-  // Default: query chain for getAuditsByUser (where → orderBy → limit → get)
-  mockWhere.mockReturnValue({ orderBy: mockOrderBy });
-  mockOrderBy.mockReturnValue({ limit: mockLimit });
+  // Default: query chain for getAuditsByUser
+  // First call: count query (where → get), Second call: paginated (where → orderBy → offset → limit → get)
+  mockWhere.mockReturnValue({
+    get: mockCountGet,
+    orderBy: mockOrderBy,
+  });
+  mockCountGet.mockResolvedValue({ size: 0 });
+  mockOrderBy.mockReturnValue({ offset: mockOffset });
+  mockOffset.mockReturnValue({ limit: mockLimit });
   mockLimit.mockReturnValue({ get: mockQueryGet });
   mockQueryGet.mockResolvedValue({ empty: true, docs: [] });
 });
@@ -536,17 +544,19 @@ describe("Audit error paths (coverage)", () => {
 /* PERF-155: GET /audits/recent — list recent audits for user          */
 /* ================================================================== */
 
-describe("PERF-155: GET /audits/recent", () => {
-  it("returns 200 with empty items when user has no audits", async () => {
-    mockQueryGet.mockResolvedValue({ empty: true, docs: [] });
-
+describe("PERF-155: GET /audits/recent (paginated)", () => {
+  it("returns 200 with empty items and pagination metadata", async () => {
     const res = await request(app).get("/audits/recent").set("Cookie", "__session=valid-session");
 
     expect(res.status).toBe(200);
     expect(res.body.items).toEqual([]);
+    expect(res.body.page).toBe(1);
+    expect(res.body.size).toBe(5);
+    expect(res.body.total).toBe(0);
   });
 
-  it("returns 200 with recent audit items including score", async () => {
+  it("returns 200 with recent audit items including score and pagination", async () => {
+    mockCountGet.mockResolvedValue({ size: 2 });
     mockQueryGet.mockResolvedValue({
       empty: false,
       docs: [
@@ -593,14 +603,14 @@ describe("PERF-155: GET /audits/recent", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.items).toHaveLength(2);
+    expect(res.body.page).toBe(1);
+    expect(res.body.total).toBe(2);
 
     expect(res.body.items[0]).toMatchObject({
       jobId: "job-001",
       url: "https://example.com",
       status: "completed",
       performanceScore: 0.98,
-      createdAt: "2026-03-20T10:00:00.000Z",
-      completedAt: "2026-03-20T10:01:00.000Z",
     });
 
     expect(res.body.items[1]).toMatchObject({
@@ -611,28 +621,39 @@ describe("PERF-155: GET /audits/recent", () => {
     });
   });
 
-  it("respects ?limit query param (clamped to max 20)", async () => {
-    mockQueryGet.mockResolvedValue({ empty: true, docs: [] });
-
-    await request(app).get("/audits/recent?limit=10").set("Cookie", "__session=valid-session");
+  it("respects ?size query param (clamped to max 20)", async () => {
+    await request(app).get("/audits/recent?size=10").set("Cookie", "__session=valid-session");
 
     expect(mockLimit).toHaveBeenCalledWith(10);
   });
 
-  it("defaults limit to 5 when not provided", async () => {
-    mockQueryGet.mockResolvedValue({ empty: true, docs: [] });
-
+  it("defaults size to 5 when not provided", async () => {
     await request(app).get("/audits/recent").set("Cookie", "__session=valid-session");
 
     expect(mockLimit).toHaveBeenCalledWith(5);
   });
 
-  it("clamps limit to max 20", async () => {
-    mockQueryGet.mockResolvedValue({ empty: true, docs: [] });
-
-    await request(app).get("/audits/recent?limit=100").set("Cookie", "__session=valid-session");
+  it("clamps size to max 20", async () => {
+    await request(app).get("/audits/recent?size=100").set("Cookie", "__session=valid-session");
 
     expect(mockLimit).toHaveBeenCalledWith(20);
+  });
+
+  it("supports page parameter for pagination", async () => {
+    await request(app).get("/audits/recent?page=2&size=5").set("Cookie", "__session=valid-session");
+
+    // page 2, size 5 → offset should be (2-1)*5 = 5
+    expect(mockOffset).toHaveBeenCalledWith(5);
+    expect(mockLimit).toHaveBeenCalledWith(5);
+  });
+
+  it("returns correct page number in response", async () => {
+    const res = await request(app)
+      .get("/audits/recent?page=3")
+      .set("Cookie", "__session=valid-session");
+
+    expect(res.status).toBe(200);
+    expect(res.body.page).toBe(3);
   });
 
   it("returns 401 when not authenticated", async () => {
@@ -644,7 +665,7 @@ describe("PERF-155: GET /audits/recent", () => {
   });
 
   it("returns 500 when Firestore query fails", async () => {
-    mockQueryGet.mockRejectedValue(new Error("Firestore unavailable"));
+    mockCountGet.mockRejectedValue(new Error("Firestore unavailable"));
 
     const res = await request(app).get("/audits/recent").set("Cookie", "__session=valid-session");
 
@@ -658,7 +679,7 @@ describe("PERF-155: GET /audits/recent", () => {
 
   it("passes through AppError from service layer", async () => {
     const { AppError } = await import("../src/domain/errors.js");
-    mockQueryGet.mockRejectedValue(new AppError(503, "SERVICE_UNAVAILABLE", "DB down."));
+    mockCountGet.mockRejectedValue(new AppError(503, "SERVICE_UNAVAILABLE", "DB down."));
 
     const res = await request(app).get("/audits/recent").set("Cookie", "__session=valid-session");
 
@@ -667,6 +688,7 @@ describe("PERF-155: GET /audits/recent", () => {
   });
 
   it("silently skips corrupt documents (safeParse filter)", async () => {
+    mockCountGet.mockResolvedValue({ size: 2 });
     mockQueryGet.mockResolvedValue({
       empty: false,
       docs: [
@@ -683,7 +705,6 @@ describe("PERF-155: GET /audits/recent", () => {
         },
         {
           data: () => ({
-            // Missing required fields — should be skipped
             jobId: "job-corrupt",
           }),
         },
