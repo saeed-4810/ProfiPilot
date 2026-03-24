@@ -460,7 +460,7 @@ export default function AuditPage() {
                     {/* Engine Settings — Stitch card design */}
                     <div data-testid="engine-settings">
                       {/* Header row */}
-                      <div className="flex items-center justify-between px-2 mb-3">
+                      <div className="flex items-center justify-between px-2 mb-5">
                         <div className="flex items-center gap-2 text-[10px] text-gray-500 font-medium uppercase tracking-[0.15em]">
                           <span className="material-symbols-outlined text-base" aria-hidden="true">
                             settings_input_component
