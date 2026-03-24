@@ -472,11 +472,11 @@ export default function AuditPage() {
                             <span className="w-1 h-1 rounded-full bg-[#4ae176]" />
                             Engine Ready
                           </span>
-                          <span className="flex items-center gap-1">
+                          <span className="flex items-center gap-1" data-testid="audit-count">
                             <span className="material-symbols-outlined text-xs" aria-hidden="true">
                               history
                             </span>
-                            0 audits today
+                            {recentTotal} audit{recentTotal === 1 ? "" : "s"} total
                           </span>
                         </div>
                       </div>
