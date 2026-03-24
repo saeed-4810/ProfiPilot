@@ -3,7 +3,7 @@ import type { Router as RouterType } from "express";
 import { AppError } from "../domain/errors.js";
 import { CreateAuditSchema } from "../domain/audit.js";
 import { requireAuth } from "../middleware/auth.js";
-import { createAudit, getAuditStatus } from "../services/audit-service.js";
+import { createAudit, getAuditStatus, listRecentAudits } from "../services/audit-service.js";
 import { getLastCompletedAuditByUrl } from "../adapters/firestore-audit.js";
 
 export const auditRouter: RouterType = Router();
@@ -34,6 +34,32 @@ auditRouter.post(
         return;
       }
       next(new AppError(500, "AUDIT_CREATE_FAILED", "Failed to create audit job."));
+    }
+  }
+);
+
+/**
+ * GET /audits/recent
+ * PERF-155: List recent audit jobs for the authenticated user.
+ * Query params: ?limit=5 (default 5, max 20)
+ * Returns 200 with { items: RecentAuditItem[] }.
+ */
+auditRouter.get(
+  "/recent",
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const uid = (req as Request & { uid: string }).uid;
+      const limit = Math.min(20, Math.max(1, parseInt(req.query["limit"] as string, 10) || 5));
+
+      const result = await listRecentAudits(uid, limit);
+      res.status(200).json(result);
+    } catch (err) {
+      if (err instanceof AppError) {
+        next(err);
+        return;
+      }
+      next(new AppError(500, "AUDIT_LIST_FAILED", "Failed to retrieve recent audits."));
     }
   }
 );

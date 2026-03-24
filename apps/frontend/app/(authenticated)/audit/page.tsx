@@ -25,12 +25,14 @@ import { AuditProgress } from "@/components/ui/AuditProgress";
 import {
   createAudit,
   getAuditStatus,
+  getRecentAudits,
   isTerminalStatus,
   COPY_URL_VALIDATION_ERROR,
   COPY_ONBOARDING_HELPER,
   COPY_AUDIT_FAILED,
   COPY_AUDIT_COMPLETED,
   type AuditStatus,
+  type RecentAuditItem,
 } from "@/lib/audit";
 
 /* ------------------------------------------------------------------ */
@@ -61,6 +63,59 @@ const STEP_ADVANCE_MS = 4_000;
 const TOTAL_STEPS = 5;
 
 /* ------------------------------------------------------------------ */
+/* Recent audit helpers — Stitch design tokens                        */
+/* ------------------------------------------------------------------ */
+
+/** Status icon name for the recent audit row. */
+function getStatusIcon(status: string): string {
+  switch (status) {
+    case "completed":
+      return "task_alt";
+    case "failed":
+    case "cancelled":
+      return "priority_high";
+    default:
+      return "schedule";
+  }
+}
+
+/** Status icon container style (bg + text color). */
+function getStatusIconStyle(status: string): string {
+  switch (status) {
+    case "completed":
+      return "bg-[#4ae176]/10 text-[#4ae176]";
+    case "failed":
+    case "cancelled":
+      return "bg-[#ffb95f]/10 text-[#ffb95f]";
+    default:
+      return "bg-white/5 text-gray-500";
+  }
+}
+
+/** Score color based on Lighthouse thresholds (0-1 scale). */
+function getScoreColor(score: number): string {
+  if (score >= 0.9) return "text-[#4ae176]";
+  if (score >= 0.5) return "text-[#ffb95f]";
+  return "text-red-400";
+}
+
+/** Format ISO timestamp to relative time string. */
+function formatRelativeTime(iso: string): string {
+  const now = Date.now();
+  const then = new Date(iso).getTime();
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60_000);
+  const diffHr = Math.floor(diffMs / 3_600_000);
+  const diffDay = Math.floor(diffMs / 86_400_000);
+
+  if (diffMin < 1) return "Just now";
+  if (diffMin < 60) return `${diffMin} min ago`;
+  if (diffHr < 24) return `${diffHr} hour${diffHr === 1 ? "" : "s"} ago`;
+  if (diffDay === 1) return "Yesterday";
+  return `${diffDay} days ago`;
+}
+
+/* ------------------------------------------------------------------ */
 /* AuditPage component                                                */
 /* ------------------------------------------------------------------ */
 
@@ -76,6 +131,10 @@ export default function AuditPage() {
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [progressStep, setProgressStep] = useState<number>(0);
+
+  /* --- Recent audits state --- */
+  const [recentAudits, setRecentAudits] = useState<RecentAuditItem[]>([]);
+  const [recentLoading, setRecentLoading] = useState(true);
 
   /* --- Refs --- */
   const urlInputRef = useRef<HTMLInputElement>(null);
@@ -120,6 +179,25 @@ export default function AuditPage() {
       stopStepTimer();
     };
   }, [stopPolling, stopStepTimer]);
+
+  /* --- Fetch recent audits on mount --- */
+  useEffect(() => {
+    let cancelled = false;
+    setRecentLoading(true);
+    getRecentAudits(5)
+      .then((res) => {
+        if (!cancelled) setRecentAudits(res.items);
+      })
+      .catch(() => {
+        /* Silently fail — recent audits is non-critical UI */
+      })
+      .finally(() => {
+        if (!cancelled) setRecentLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /* --- Pre-fill URL from query param --- */
   useEffect(() => {
@@ -431,7 +509,6 @@ export default function AuditPage() {
 
           {/* -------------------------------------------------------- */}
           {/* Recent Projects — Stitch: mt-24 max-w-4xl               */}
-          {/* Placeholder for MVP — will be wired to listProjects()   */}
           {/* -------------------------------------------------------- */}
           <div className="mt-24 max-w-4xl mx-auto" data-testid="recent-projects">
             <div className="flex items-center justify-between mb-8 px-2">
@@ -440,10 +517,96 @@ export default function AuditPage() {
               </h2>
             </div>
             <div className="grid grid-cols-1 gap-3">
-              {/* Empty state — no audits yet */}
-              <div className="flex items-center justify-center p-8 rounded-xl border border-white/[0.05] text-gray-600 text-sm">
-                <span>No audits yet. Enter a URL above to get started.</span>
-              </div>
+              {/* Loading skeleton */}
+              {recentLoading && (
+                <div data-testid="recent-loading">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="flex items-center gap-5 p-4 rounded-xl animate-pulse">
+                      <div className="w-9 h-9 rounded-lg bg-white/5" />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-3.5 w-48 rounded bg-white/5" />
+                        <div className="h-2.5 w-32 rounded bg-white/5" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!recentLoading && recentAudits.length === 0 && (
+                <div
+                  data-testid="recent-empty"
+                  className="flex items-center justify-center p-8 rounded-xl border border-white/[0.05] text-gray-600 text-sm"
+                >
+                  <span>No audits yet. Enter a URL above to get started.</span>
+                </div>
+              )}
+
+              {/* Audit rows — Stitch design */}
+              {!recentLoading &&
+                recentAudits.map((audit) => (
+                  <div
+                    key={audit.jobId}
+                    data-testid={`recent-audit-${audit.jobId}`}
+                    onClick={() => {
+                      if (audit.status === "completed") {
+                        router.push(`/results?id=${audit.jobId}`);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if ((e.key === "Enter" || e.key === " ") && audit.status === "completed") {
+                        router.push(`/results?id=${audit.jobId}`);
+                      }
+                    }}
+                    role={audit.status === "completed" ? "link" : undefined}
+                    tabIndex={audit.status === "completed" ? 0 : undefined}
+                    className="group flex items-center justify-between p-4 rounded-xl hover:bg-white/[0.03] border border-transparent hover:border-white/[0.05] transition-all cursor-pointer"
+                  >
+                    <div className="flex items-center gap-5">
+                      {/* Status icon — Stitch: colored bg circle */}
+                      <div
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center ${getStatusIconStyle(audit.status)}`}
+                      >
+                        <span className="material-symbols-outlined text-xl" aria-hidden="true">
+                          {getStatusIcon(audit.status)}
+                        </span>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-medium">
+                          {audit.url.replace(/^https?:\/\//, "")}
+                        </h4>
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          {formatRelativeTime(audit.createdAt)}
+                          {audit.status === "completed" && audit.performanceScore !== null && (
+                            <>
+                              {" \u2022 "}
+                              <span
+                                className={`font-medium ${getScoreColor(audit.performanceScore)}`}
+                              >
+                                {Math.round(audit.performanceScore * 100)} Performance
+                              </span>
+                            </>
+                          )}
+                          {audit.status === "failed" && (
+                            <>
+                              {" \u2022 "}
+                              <span className="font-medium text-red-400">Failed</span>
+                            </>
+                          )}
+                          {(audit.status === "queued" || audit.status === "running") && (
+                            <>
+                              {" \u2022 "}
+                              <span className="font-medium text-[#adc6ff]">In progress</span>
+                            </>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="material-symbols-outlined text-gray-700 group-hover:text-[#adc6ff] group-hover:translate-x-1 transition-all motion-reduce:transition-none">
+                      chevron_right
+                    </span>
+                  </div>
+                ))}
             </div>
           </div>
         </div>

@@ -130,6 +130,32 @@ export async function getLastCompletedAuditByUrl(
 }
 /* v8 ignore stop */
 
+/**
+ * Get recent audit jobs for a user, ordered by createdAt descending.
+ * Uses the composite index: audits(uid ASC, createdAt DESC).
+ * Applies safeParse to silently skip corrupt documents (ADR-021, W5).
+ */
+export async function getAuditsByUser(uid: string, limit: number): Promise<AuditJob[]> {
+  const firestore = getFirebaseApp().firestore();
+
+  const snapshot = await firestore
+    .collection(COLLECTION)
+    .where("uid", "==", uid)
+    .orderBy("createdAt", "desc")
+    .limit(limit)
+    .get();
+
+  const audits: AuditJob[] = [];
+  for (const doc of snapshot.docs) {
+    const parsed = AuditJobSchema.safeParse(doc.data());
+    if (parsed.success) {
+      audits.push({ ...parsed.data, strategy: parsed.data.strategy ?? "mobile" });
+    }
+  }
+
+  return audits;
+}
+
 /** Write parsed CWV metrics to the audit document's metrics subdocument per ADR-012. */
 export async function updateAuditMetrics(jobId: string, metrics: AuditMetrics): Promise<void> {
   const firestore = getFirebaseApp().firestore();

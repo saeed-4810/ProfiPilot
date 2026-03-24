@@ -1,6 +1,10 @@
 import { AppError } from "../domain/errors.js";
 import type { AuditJob, AuditMetrics, AuditStatus } from "../domain/audit.js";
-import { createAuditJob as createJob, getAuditJob } from "../adapters/firestore-audit.js";
+import {
+  createAuditJob as createJob,
+  getAuditJob,
+  getAuditsByUser,
+} from "../adapters/firestore-audit.js";
 import { processAuditJob } from "./audit-worker.js";
 
 /** Response shape for POST /audits (CTR-005). */
@@ -65,4 +69,38 @@ export async function getAuditStatus(uid: string, jobId: string): Promise<AuditS
     ...(job.lastError !== undefined ? { lastError: job.lastError } : {}),
     ...(job.metrics !== undefined ? { metrics: job.metrics } : {}),
   };
+}
+
+/** Response item shape for GET /audits/recent. */
+export interface RecentAuditItem {
+  jobId: string;
+  url: string;
+  status: AuditStatus;
+  performanceScore: number | null;
+  createdAt: string;
+  completedAt?: string | undefined;
+}
+
+/** Response shape for GET /audits/recent. */
+export interface RecentAuditsResult {
+  items: RecentAuditItem[];
+}
+
+/**
+ * List recent audit jobs for the authenticated user.
+ * Returns a flat list of recent audits with URL, status, score, and timestamps.
+ */
+export async function listRecentAudits(uid: string, limit: number): Promise<RecentAuditsResult> {
+  const audits = await getAuditsByUser(uid, limit);
+
+  const items: RecentAuditItem[] = audits.map((job) => ({
+    jobId: job.jobId,
+    url: job.url,
+    status: job.status,
+    performanceScore: job.metrics?.performanceScore ?? null,
+    createdAt: job.createdAt,
+    ...(job.completedAt !== undefined ? { completedAt: job.completedAt } : {}),
+  }));
+
+  return { items };
 }

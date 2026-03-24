@@ -97,6 +97,50 @@ export async function getAuditStatus(jobId: string): Promise<AuditStatusResponse
   return (await response.json()) as AuditStatusResponse;
 }
 
+/* ------------------------------------------------------------------ */
+/* Recent audits — GET /audits/recent (PERF-155)                      */
+/* ------------------------------------------------------------------ */
+
+/** Single item in the recent audits response. */
+export interface RecentAuditItem {
+  jobId: string;
+  url: string;
+  status: AuditStatus;
+  performanceScore: number | null;
+  createdAt: string;
+  completedAt?: string;
+}
+
+/** Response shape from GET /audits/recent. */
+export interface RecentAuditsResponse {
+  items: RecentAuditItem[];
+}
+
+/**
+ * Fetch recent audit jobs for the authenticated user.
+ * GET /audits/recent with session cookie (credentials: "include").
+ */
+export async function getRecentAudits(limit: number = 5): Promise<RecentAuditsResponse> {
+  const response = await fetch(`${API_BASE}/audits/recent?limit=${limit}`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = (await response.json()) as ApiError;
+    const err = new Error(error.message ?? "Failed to fetch recent audits.") as Error & {
+      status: number;
+      code: string;
+    };
+    err.status = response.status;
+    err.code = error.code ?? "UNKNOWN";
+    throw err;
+  }
+
+  return (await response.json()) as RecentAuditsResponse;
+}
+
 /** Terminal statuses — polling should stop when status reaches one of these. */
 export const TERMINAL_STATUSES: ReadonlySet<AuditStatus> = new Set([
   "completed",
