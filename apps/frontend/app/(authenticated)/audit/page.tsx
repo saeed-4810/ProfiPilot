@@ -1,29 +1,19 @@
 "use client";
 
 /**
- * Audit page — Stitch "Audit Setup v1" design.
+ * Audit page — Stitch "Audit Setup v1" design (pixel-accurate).
  *
  * PERF-155: Redesign audit page to match Stitch hero input card layout.
  *
- * Layout: Centered "New Audit" hero → elevated input card with link icon
- * prefix + Run Audit CTA → progress/error/success states below card.
+ * Layout matches Stitch HTML exactly:
+ * - pt-16 px-10 pb-20 (layout already adds pt-16 for nav = total pt-32)
+ * - max-w-5xl mx-auto content container
+ * - mb-16 text-center hero with text-4xl font-light heading
+ * - bg-[#141314] elevated input card with link icon + Run Audit CTA
+ * - Engine settings row below input inside card
+ * - Recent Projects section with mt-24 (placeholder for MVP)
  *
- * All business logic preserved from original implementation:
- * - Zod URL validation (HTTPS only)
- * - createAudit → polling → redirect to /results
- * - 5-state page model (empty/loading/success/error/blocked)
- * - AuditProgress stepper for loading/error states
- * - Retry handler
- * - Analytics: trackPageView on mount, trackAuditTrigger on submit
- * - ?url= prefill from dashboard
- *
- * Stitch design tokens:
- * - bg-[#141314] (surface-container-low) for input card
- * - border-white/[0.06] card border
- * - bg-[#18181a] (surface-container) for input field
- * - bg-[#adc6ff] text-[#002e6a] for Run Audit button
- * - text-4xl font-light tracking-tight for heading
- * - Manrope font (inherited from root layout)
+ * All business logic preserved from original implementation.
  */
 
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
@@ -114,7 +104,6 @@ export default function AuditPage() {
     stopStepTimer();
     stepTimerRef.current = setInterval(() => {
       setProgressStep((prev) => {
-        // Don't advance past step 3 (0-indexed) — step 4 is reserved for "completed"
         if (prev < TOTAL_STEPS - 2) {
           return prev + 1;
         }
@@ -132,7 +121,7 @@ export default function AuditPage() {
     };
   }, [stopPolling, stopStepTimer]);
 
-  /* --- Pre-fill URL from query param (e.g., from dashboard "Run first audit") --- */
+  /* --- Pre-fill URL from query param --- */
   useEffect(() => {
     /* v8 ignore next 3 -- prefill branch: only fires when navigated from dashboard with ?url= param */
     if (prefillUrl !== null && prefillUrl !== "" && urlInputRef.current !== null) {
@@ -143,7 +132,6 @@ export default function AuditPage() {
   /* --- Poll audit status --- */
   const startPolling = useCallback(
     (id: string) => {
-      // Clear any existing poll before starting a new one
       stopPolling();
 
       pollRef.current = setInterval(async () => {
@@ -156,10 +144,8 @@ export default function AuditPage() {
             stopStepTimer();
 
             if (result.status === "completed") {
-              // Set all steps to completed
               setProgressStep(TOTAL_STEPS - 1);
               setPageState("success");
-              // Brief delay so user sees all checkmarks before redirect
               setTimeout(() => {
                 router.push(`/results?id=${id}`);
               }, 1_000);
@@ -171,12 +157,10 @@ export default function AuditPage() {
         } catch (err: unknown) {
           const typedErr = err as Error & { status?: number };
           if (typedErr.status === 401) {
-            // Blocked state — not authenticated
             stopPolling();
             setPageState("blocked");
             router.push("/login");
           }
-          // For other polling errors, keep polling — transient failures are expected
         }
       }, POLL_INTERVAL_MS);
     },
@@ -193,7 +177,6 @@ export default function AuditPage() {
       const formData = new FormData(e.currentTarget);
       const raw = { url: String(formData.get("url")) };
 
-      // Client-side Zod validation
       const parsed = AuditUrlSchema.safeParse(raw);
       if (!parsed.success) {
         const flat = parsed.error.flatten().fieldErrors;
@@ -205,7 +188,6 @@ export default function AuditPage() {
         return;
       }
 
-      // Transition to loading state
       trackAuditTrigger({ url: parsed.data.url, timestamp: Date.now() });
       setPageState("loading");
       setAuditStatus("queued");
@@ -221,20 +203,17 @@ export default function AuditPage() {
         const typedErr = err as Error & { status?: number; code?: string };
 
         if (typedErr.status === 401) {
-          // Blocked state — not authenticated
           setPageState("blocked");
           router.push("/login");
           return;
         }
 
         if (typedErr.status === 400) {
-          // Validation error from server
           setFieldError(typedErr.message || COPY_URL_VALIDATION_ERROR);
           setPageState("empty");
           return;
         }
 
-        // General error
         setError(typedErr.message || "An unexpected error occurred.");
         setPageState("error");
         setTimeout(() => errorRef.current?.focus(), 50);
@@ -260,34 +239,29 @@ export default function AuditPage() {
 
   return (
     <MotionWrapper>
-      <div data-testid="audit-page" className="min-h-screen px-4 md:px-10 pb-20 pt-16">
+      {/* Stitch: pt-16 here + layout pt-16 = total pt-32, px-10, pb-20 */}
+      <div data-testid="audit-page" className="min-h-screen pt-16 px-10 pb-20">
         <div className="max-w-5xl mx-auto">
           {/* -------------------------------------------------------- */}
-          {/* Hero heading — Stitch: centered, light weight            */}
+          {/* Hero heading — Stitch: mb-16 text-center                 */}
           {/* -------------------------------------------------------- */}
           <div className="mb-16 text-center">
             <h1 className="text-4xl font-light tracking-tight text-[#e5e2e3] mb-3">New Audit</h1>
-
-            {/* copy: onboarding-helper — shown in empty state */}
+            {/* Stitch subtitle — always visible */}
+            <p className="text-gray-500 text-lg font-light">Enter a URL to begin your analysis.</p>
+            {/* copy: onboarding-helper — screen-reader accessible, visually hidden when subtitle shows */}
             {pageState === "empty" && (
-              <p data-testid="audit-helper" className="text-gray-500 text-lg font-light">
+              <p data-testid="audit-helper" className="sr-only">
                 {COPY_ONBOARDING_HELPER}
-              </p>
-            )}
-
-            {/* Subtitle for non-empty states */}
-            {pageState !== "empty" && (
-              <p className="text-gray-500 text-lg font-light">
-                Enter a URL to begin your analysis.
               </p>
             )}
           </div>
 
           {/* -------------------------------------------------------- */}
-          {/* Error state with progress indicator showing failure point */}
+          {/* Error state with progress indicator                      */}
           {/* -------------------------------------------------------- */}
           {pageState === "error" && auditStatus !== null && auditStatus !== "queued" && (
-            <div data-testid="audit-error-progress" className="max-w-2xl mx-auto mb-8">
+            <div data-testid="audit-error-progress" className="mb-8">
               <AuditProgress
                 currentStep={progressStep}
                 failed={true}
@@ -297,7 +271,7 @@ export default function AuditPage() {
             </div>
           )}
 
-          {/* Error banner — general errors (not field-level, no progress context) */}
+          {/* Error banner — general errors */}
           {pageState === "error" &&
             (auditStatus === null || auditStatus === "queued") &&
             error !== null && (
@@ -306,7 +280,7 @@ export default function AuditPage() {
                 role="alert"
                 tabIndex={-1}
                 data-testid="audit-error"
-                className="max-w-2xl mx-auto mb-8 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm flex items-start gap-3"
+                className="mb-8 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm flex items-start gap-3"
               >
                 <span
                   className="material-symbols-outlined text-red-400 mt-0.5 shrink-0"
@@ -319,22 +293,25 @@ export default function AuditPage() {
             )}
 
           {/* -------------------------------------------------------- */}
-          {/* Elevated input card — Stitch design                      */}
+          {/* Elevated input card — exact Stitch layout                */}
+          {/* bg-surface-container-low (#141314)                       */}
+          {/* border-white/[0.06] rounded-2xl p-4 md:p-6 shadow-2xl   */}
           {/* -------------------------------------------------------- */}
           {(pageState === "empty" || pageState === "error") && (
             <div className="relative">
               <div className="bg-[#141314] border border-white/[0.06] rounded-2xl p-4 md:p-6 shadow-2xl">
                 <form onSubmit={handleSubmit} noValidate>
                   <div className="flex flex-col gap-6">
-                    {/* URL input + Run Audit button row */}
+                    {/* URL input + Run Audit button — Stitch: flex-col md:flex-row gap-3 */}
                     <div className="flex flex-col md:flex-row gap-3">
                       <div className="relative flex-1 group">
-                        {/* Link icon prefix */}
+                        {/* Link icon — Stitch: pl-5, text-gray-500, focus:text-primary */}
                         <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none text-gray-500 group-focus-within:text-[#adc6ff] transition-colors">
                           <span className="material-symbols-outlined text-xl" aria-hidden="true">
                             link
                           </span>
                         </div>
+                        {/* Input — Stitch: bg-surface-container (#18181a), h-14, pl-14, rounded-xl */}
                         <input
                           ref={urlInputRef}
                           id="audit-url"
@@ -352,18 +329,18 @@ export default function AuditPage() {
                         />
                       </div>
 
-                      {/* Run Audit button — Stitch primary style */}
+                      {/* Run Audit — Stitch: bg-primary (#adc6ff), text-on-primary (#002e6a), h-14 px-10 */}
                       <button
                         type="submit"
                         disabled={isLoading}
                         data-testid="audit-submit"
                         className="h-14 px-10 bg-[#adc6ff] text-[#002e6a] font-medium text-base rounded-xl hover:bg-[#d8e2ff] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#adc6ff]/5 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Run Audit
+                        <span>Run Audit</span>
                       </button>
                     </div>
 
-                    {/* Field error — inline below input inside card */}
+                    {/* Field error — inline below input */}
                     {fieldError !== null && (
                       <p
                         id="url-error"
@@ -373,6 +350,33 @@ export default function AuditPage() {
                         {fieldError}
                       </p>
                     )}
+
+                    {/* Engine settings row — Stitch: flex justify-between px-2 */}
+                    <div className="flex items-center justify-between px-2">
+                      <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span className="material-symbols-outlined text-base" aria-hidden="true">
+                            settings_input_component
+                          </span>
+                          <span>Engine Settings</span>
+                          <span className="material-symbols-outlined text-sm" aria-hidden="true">
+                            expand_more
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-[11px] text-gray-600">
+                        <span className="flex items-center gap-1">
+                          <span className="w-1 h-1 rounded-full bg-[#4ae176]" />
+                          Engine Ready
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs" aria-hidden="true">
+                            history
+                          </span>
+                          0 audits today
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </form>
               </div>
@@ -380,10 +384,10 @@ export default function AuditPage() {
           )}
 
           {/* -------------------------------------------------------- */}
-          {/* Loading / progress state — multi-step progress (PERF-142)*/}
+          {/* Loading / progress state                                 */}
           {/* -------------------------------------------------------- */}
           {pageState === "loading" && (
-            <div data-testid="audit-progress" className="max-w-2xl mx-auto mt-8">
+            <div data-testid="audit-progress" className="mt-8">
               <AuditProgress currentStep={progressStep} failed={false} />
               {jobId !== null && (
                 <p data-testid="audit-job-id" className="text-gray-600 text-xs text-center mt-4">
@@ -394,14 +398,14 @@ export default function AuditPage() {
           )}
 
           {/* -------------------------------------------------------- */}
-          {/* Success state — all steps completed, redirecting          */}
+          {/* Success state                                            */}
           {/* -------------------------------------------------------- */}
           {pageState === "success" && (
-            <div data-testid="audit-success" className="max-w-2xl mx-auto mt-8">
+            <div data-testid="audit-success" className="mt-8">
               <AuditProgress currentStep={TOTAL_STEPS - 1} failed={false} />
               <p
                 data-testid="audit-status-message"
-                className="text-green-400 text-sm font-medium text-center mt-4"
+                className="text-[#4ae176] text-sm font-medium text-center mt-4"
               >
                 {COPY_AUDIT_COMPLETED}
               </p>
@@ -424,6 +428,24 @@ export default function AuditPage() {
               </button>
             </div>
           )}
+
+          {/* -------------------------------------------------------- */}
+          {/* Recent Projects — Stitch: mt-24 max-w-4xl               */}
+          {/* Placeholder for MVP — will be wired to listProjects()   */}
+          {/* -------------------------------------------------------- */}
+          <div className="mt-24 max-w-4xl mx-auto" data-testid="recent-projects">
+            <div className="flex items-center justify-between mb-8 px-2">
+              <h2 className="text-[11px] uppercase tracking-[0.2em] font-medium text-gray-500">
+                Recent Projects
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 gap-3">
+              {/* Empty state — no audits yet */}
+              <div className="flex items-center justify-center p-8 rounded-xl border border-white/[0.05] text-gray-600 text-sm">
+                <span>No audits yet. Enter a URL above to get started.</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </MotionWrapper>
