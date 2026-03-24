@@ -87,10 +87,11 @@ test.describe("Results flow — /results", () => {
     await page.goto("/results");
     await expect(page.getByTestId("results-page")).toBeVisible({ timeout: 10_000 });
 
-    // Should show not-found or empty state (no audit ID in query params)
+    // Should show browse state, not-found, or empty state (no audit ID in query params)
     await expect(
       page
-        .getByTestId("results-not-found")
+        .getByTestId("results-browse")
+        .or(page.getByTestId("results-not-found"))
         .or(page.getByTestId("results-empty"))
         .or(page.getByTestId("results-error"))
     ).toBeVisible({ timeout: 10_000 });

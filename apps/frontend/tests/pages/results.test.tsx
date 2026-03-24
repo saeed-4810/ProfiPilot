@@ -18,6 +18,9 @@ vi.mock("next/navigation", () => ({
 const mockGetRecommendations = vi.fn();
 const mockGetSummary = vi.fn();
 const mockGetAuditStatus = vi.fn();
+const mockListProjects = vi.fn();
+const mockGetProject = vi.fn();
+const mockGetLatestAuditForUrl = vi.fn();
 
 vi.mock("@/lib/audit", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -33,6 +36,16 @@ vi.mock("@/lib/results", async (importOriginal) => {
     ...actual,
     getRecommendations: (...args: unknown[]) => mockGetRecommendations(...args),
     getSummary: (...args: unknown[]) => mockGetSummary(...args),
+  };
+});
+
+vi.mock("@/lib/projects", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    listProjects: (...args: unknown[]) => mockListProjects(...args),
+    getProject: (...args: unknown[]) => mockGetProject(...args),
+    getLatestAuditForUrl: (...args: unknown[]) => mockGetLatestAuditForUrl(...args),
   };
 });
 
@@ -110,6 +123,10 @@ beforeEach(() => {
       performanceScore: 0.85,
     },
   });
+  // Default: browse list returns empty (no projects)
+  mockListProjects.mockResolvedValue({ items: [] });
+  mockGetProject.mockResolvedValue({ projectId: "proj-1", name: "Test", urls: [] });
+  mockGetLatestAuditForUrl.mockResolvedValue({ auditId: null, hasAuditData: false });
 });
 
 afterEach(() => {
@@ -722,26 +739,26 @@ describe("T-PERF-102-004: Handles 404 AUDIT_NOT_FOUND", () => {
     expect(mockPush).toHaveBeenCalledWith("/dashboard");
   });
 
-  it("shows not-found state when no id search param is provided", async () => {
+  it("shows browse state when no id search param is provided", async () => {
     mockSearchParamsId = null;
 
     render(<ResultsPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("results-not-found")).toBeInTheDocument();
+      expect(screen.getByTestId("results-browse-empty")).toBeInTheDocument();
     });
 
     expect(mockGetRecommendations).not.toHaveBeenCalled();
     expect(mockGetSummary).not.toHaveBeenCalled();
   });
 
-  it("shows not-found state when id search param is empty string", async () => {
+  it("shows browse state when id search param is empty string", async () => {
     mockSearchParamsId = "";
 
     render(<ResultsPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("results-not-found")).toBeInTheDocument();
+      expect(screen.getByTestId("results-browse-empty")).toBeInTheDocument();
     });
 
     expect(mockGetRecommendations).not.toHaveBeenCalled();
@@ -1517,5 +1534,113 @@ describe("PERF-148: Source metric attribution in executive summary", () => {
       expect(screen.getByTestId("source-ref-LCP")).toBeInTheDocument();
       expect(screen.getByTestId("source-ref-trigger-LCP")).toHaveTextContent("LCP: 3.2s");
     });
+  });
+});
+
+/* ================================================================== */
+/* Browse state: list audited URLs when no ?id= param                  */
+/* ================================================================== */
+
+describe("Browse state — list audited URLs when no ?id= param", () => {
+  it("shows browse list with audited URLs from projects", async () => {
+    mockSearchParamsId = null;
+    mockListProjects.mockResolvedValue({
+      items: [{ projectId: "proj-1", name: "My Site", createdAt: "2026-01-01T00:00:00Z" }],
+    });
+    mockGetProject.mockResolvedValue({
+      projectId: "proj-1",
+      name: "My Site",
+      urls: [
+        { urlId: "url-1", url: "https://example.com", projectId: "proj-1" },
+        { urlId: "url-2", url: "https://example.com/about", projectId: "proj-1" },
+      ],
+    });
+    mockGetLatestAuditForUrl.mockImplementation(async (url: string) => {
+      if (url === "https://example.com") {
+        return { auditId: "audit-abc", hasAuditData: true };
+      }
+      return { auditId: null, hasAuditData: false };
+    });
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("results-browse-list")).toBeInTheDocument();
+      expect(screen.getByTestId("browse-audit-audit-abc")).toBeInTheDocument();
+      expect(screen.getByText("https://example.com")).toBeInTheDocument();
+      expect(screen.getByText("My Site")).toBeInTheDocument();
+    });
+
+    // URL without audit should not appear
+    expect(screen.queryByText("https://example.com/about")).not.toBeInTheDocument();
+  });
+
+  it("navigates to /results?id= when clicking an audited URL", async () => {
+    mockSearchParamsId = null;
+    mockListProjects.mockResolvedValue({
+      items: [{ projectId: "proj-1", name: "My Site", createdAt: "2026-01-01T00:00:00Z" }],
+    });
+    mockGetProject.mockResolvedValue({
+      projectId: "proj-1",
+      name: "My Site",
+      urls: [{ urlId: "url-1", url: "https://example.com", projectId: "proj-1" }],
+    });
+    mockGetLatestAuditForUrl.mockResolvedValue({ auditId: "audit-abc", hasAuditData: true });
+
+    const user = userEvent.setup();
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("browse-audit-audit-abc")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("browse-audit-audit-abc"));
+    expect(mockPush).toHaveBeenCalledWith("/results?id=audit-abc");
+  });
+
+  it("shows empty browse state when no projects exist", async () => {
+    mockSearchParamsId = null;
+    mockListProjects.mockResolvedValue({ items: [] });
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("results-browse-empty")).toBeInTheDocument();
+      expect(screen.getByText("No audit results yet")).toBeInTheDocument();
+    });
+  });
+
+  it("shows empty browse state when projects have no audited URLs", async () => {
+    mockSearchParamsId = null;
+    mockListProjects.mockResolvedValue({
+      items: [{ projectId: "proj-1", name: "My Site", createdAt: "2026-01-01T00:00:00Z" }],
+    });
+    mockGetProject.mockResolvedValue({
+      projectId: "proj-1",
+      name: "My Site",
+      urls: [{ urlId: "url-1", url: "https://example.com", projectId: "proj-1" }],
+    });
+    mockGetLatestAuditForUrl.mockResolvedValue({ auditId: null, hasAuditData: false });
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("results-browse-empty")).toBeInTheDocument();
+    });
+  });
+
+  it("navigates to dashboard from empty browse state", async () => {
+    mockSearchParamsId = null;
+    mockListProjects.mockResolvedValue({ items: [] });
+
+    const user = userEvent.setup();
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("results-browse-to-dashboard")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("results-browse-to-dashboard"));
+    expect(mockPush).toHaveBeenCalledWith("/dashboard");
   });
 });
