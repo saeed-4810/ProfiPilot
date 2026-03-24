@@ -1470,3 +1470,52 @@ describe("PERF-143: extractMetrics utility", () => {
     expect(metrics[1]?.rating).toBe("good");
   });
 });
+
+/* ================================================================== */
+/* PERF-148: Source metric attribution in executive summary             */
+/* ================================================================== */
+
+describe("PERF-148: Source metric attribution in executive summary", () => {
+  it("renders SourceRef components for [METRIC: value] patterns in summary", async () => {
+    mockGetRecommendations.mockResolvedValue(
+      makeRecommendationsResponse([
+        makeRecommendation({
+          metric: "LCP",
+          severity: "P0" as const,
+          currentValue: "3.2s",
+          targetValue: "2.5s",
+        }),
+      ])
+    );
+    mockGetSummary.mockResolvedValue(
+      makeSummaryResponse({
+        aiAvailable: true,
+        executiveSummary: "Your [LCP: 3.2s] exceeds the threshold.",
+      })
+    );
+    mockGetAuditStatus.mockResolvedValue({
+      jobId: "audit-123",
+      status: "completed",
+      retryCount: 0,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      metrics: {
+        lcp: 3200,
+        cls: 0.05,
+        tbt: 150,
+        fcp: 1200,
+        si: 3000,
+        ttfb: 200,
+        performanceScore: 0.65,
+      },
+    });
+
+    render(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("executive-summary")).toBeInTheDocument();
+      expect(screen.getByTestId("source-ref-LCP")).toBeInTheDocument();
+      expect(screen.getByTestId("source-ref-trigger-LCP")).toHaveTextContent("LCP: 3.2s");
+    });
+  });
+});
