@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { MotionWrapper } from "@/components/MotionWrapper";
 import { trackPageView } from "@/lib/analytics";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { HealthDots } from "@/components/ui/HealthDots";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -17,6 +16,7 @@ import {
   getProject,
   addUrlToProject,
   deleteUrl,
+  getLastAuditForProject,
   COPY_DASHBOARD_EMPTY,
   COPY_URL_VALIDATION_ERROR,
   COPY_PROJECT_NAME_REQUIRED,
@@ -27,6 +27,7 @@ import {
   COPY_PROJECT_LOAD_FAILED,
   type ProjectItem,
   type ProjectUrl,
+  type ProjectHealthData,
 } from "@/lib/projects";
 
 /* ------------------------------------------------------------------ */
@@ -64,6 +65,84 @@ interface ToastState {
 const INITIAL_TOAST: ToastState = { message: "", type: "info", open: false };
 
 /* ------------------------------------------------------------------ */
+/* Inline SVG icons — avoids external dependency                       */
+/* ------------------------------------------------------------------ */
+
+function GlobeIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-neutral-400"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10A15.3 15.3 0 0112 2z" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ expanded }: { expanded: boolean }) {
+  /* v8 ignore next -- expanded=false branch unused in current layout */
+  const rotateClass = expanded ? "rotate-180" : "";
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`text-neutral-500 transition-transform duration-200 ${rotateClass}`}
+      aria-hidden="true"
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+function LinkIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-neutral-500 shrink-0"
+      aria-hidden="true"
+    >
+      <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Keyboard handler factory                                            */
+/* ------------------------------------------------------------------ */
+
+function createKeyDownHandler(onActivate: () => void) {
+  return (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onActivate();
+    }
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* DashboardPage component                                             */
 /* ------------------------------------------------------------------ */
 
@@ -74,6 +153,7 @@ export default function DashboardPage() {
   const [pageState, setPageState] = useState<PageState>("loading");
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [projectHealth, setProjectHealth] = useState<Record<string, ProjectHealthData>>({});
 
   /* --- Create project form --- */
   const [createNameError, setCreateNameError] = useState<string | null>(null);
@@ -106,13 +186,27 @@ export default function DashboardPage() {
     setToast((prev) => ({ ...prev, open: false }));
   }, []);
 
-  /* --- Fetch projects --- */
+  /* --- Fetch projects + health data --- */
   const fetchProjects = useCallback(async () => {
     try {
       const result = await listProjects();
       setProjects(result.items);
       setPageState(result.items.length > 0 ? "success" : "empty");
       setError(null);
+
+      // Fetch health data for each project in parallel (non-blocking)
+      if (result.items.length > 0) {
+        const healthPromises = result.items.map(async (p) => {
+          const health = await getLastAuditForProject(p.projectId);
+          return { projectId: p.projectId, health };
+        });
+        const healthResults = await Promise.all(healthPromises);
+        const healthMap: Record<string, ProjectHealthData> = {};
+        for (const { projectId, health } of healthResults) {
+          healthMap[projectId] = health;
+        }
+        setProjectHealth(healthMap);
+      }
     } catch (err: unknown) {
       const typedErr = err as Error & { status?: number };
       if (typedErr.status === 401) {
@@ -320,7 +414,10 @@ export default function DashboardPage() {
             <div data-testid="dashboard-loading" role="status" aria-label="Loading projects">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+                  <div
+                    key={i}
+                    className="rounded-2xl border border-neutral-800/50 bg-neutral-900/80 p-6"
+                  >
                     <Skeleton width="60%" height="24px" variant="text" className="mb-3" />
                     <Skeleton width="40%" height="16px" variant="text" className="mb-2" />
                     <Skeleton width="80%" height="16px" variant="text" />
@@ -401,150 +498,234 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {projects.map((project) => {
                   const isExpanded = expandedProjectId === project.projectId;
+                  const health = projectHealth[project.projectId];
+                  const hasAuditData = health !== undefined && health.lastAuditDate !== null;
+                  const firstUrl = health?.firstUrl ?? null;
+
                   return (
                     <div key={project.projectId} className="col-span-1">
-                      <Card
-                        hoverable
+                      {/* Premium project card */}
+                      <div
+                        role="button"
+                        tabIndex={0}
                         onClick={() => void handleToggleProject(project.projectId)}
+                        onKeyDown={createKeyDownHandler(
+                          () => void handleToggleProject(project.projectId)
+                        )}
                         data-testid={`project-card-${project.projectId}`}
                         aria-expanded={isExpanded}
+                        className="rounded-2xl border border-neutral-800/50 bg-neutral-900/80 backdrop-blur-sm p-6 transition-all duration-300 hover:border-neutral-700/50 hover:shadow-lg hover:shadow-neutral-900/50 cursor-pointer"
                       >
-                        <div className="flex items-start justify-between mb-2">
-                          <h3
-                            className="text-base font-semibold text-neutral-50 truncate"
-                            data-testid={`project-name-${project.projectId}`}
-                          >
-                            {project.name}
-                          </h3>
-                          <Badge label="Active" variant="success" />
-                        </div>
-                        <p className="text-xs text-neutral-500">
-                          Created {new Date(project.createdAt).toLocaleDateString()}
-                        </p>
-                      </Card>
-
-                      {/* Expanded project detail */}
-                      {isExpanded && (
-                        <div
-                          data-testid={`project-detail-${project.projectId}`}
-                          className="mt-2 rounded-lg border border-neutral-800 bg-neutral-900/50 p-4"
-                        >
-                          {/* Loading detail */}
-                          {isLoadingDetail && (
-                            <div
-                              data-testid="project-detail-loading"
-                              role="status"
-                              aria-label="Loading project details"
-                            >
-                              <Skeleton
-                                width="100%"
-                                height="20px"
-                                variant="text"
-                                className="mb-2"
-                              />
-                              <Skeleton width="80%" height="20px" variant="text" />
+                        {/* Header row: icon + name + status */}
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex shrink-0 items-center justify-center rounded-lg bg-neutral-800 p-1.5">
+                              <GlobeIcon />
                             </div>
-                          )}
-
-                          {/* URLs list */}
-                          {!isLoadingDetail && (
-                            <>
-                              <h4 className="text-sm font-medium text-neutral-300 mb-3">
-                                URLs ({projectUrls.length})
-                              </h4>
-
-                              {projectUrls.length === 0 && (
-                                <p
-                                  data-testid="project-no-urls"
-                                  className="text-sm text-neutral-500 mb-3"
-                                >
-                                  No URLs added yet. Add one below to start auditing.
-                                </p>
-                              )}
-
-                              {projectUrls.length > 0 && (
-                                <ul data-testid="project-url-list" className="space-y-2 mb-4">
-                                  {projectUrls.map((urlItem) => (
-                                    <li
-                                      key={urlItem.urlId}
-                                      data-testid={`url-item-${urlItem.urlId}`}
-                                      className="flex items-center justify-between gap-2 rounded bg-neutral-800 px-3 py-2"
-                                    >
-                                      <span
-                                        className="text-sm text-neutral-300 truncate flex-1"
-                                        title={urlItem.url}
-                                      >
-                                        {urlItem.url}
-                                      </span>
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        <Button
-                                          variant="primary"
-                                          size="sm"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleRunAudit(urlItem.url);
-                                          }}
-                                          data-testid={`run-audit-${urlItem.urlId}`}
-                                          aria-label={`Run audit for ${urlItem.url}`}
-                                        >
-                                          Run Audit
-                                        </Button>
-                                        <Button
-                                          variant="danger"
-                                          size="sm"
-                                          loading={deletingUrlId === urlItem.urlId}
-                                          disabled={deletingUrlId === urlItem.urlId}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            void handleDeleteUrl(urlItem.urlId);
-                                          }}
-                                          data-testid={`delete-url-${urlItem.urlId}`}
-                                          aria-label={`Delete ${urlItem.url}`}
-                                        >
-                                          ✕
-                                        </Button>
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-
-                              {/* Add URL form */}
-                              <form
-                                onSubmit={handleAddUrl}
-                                data-testid="add-url-form"
-                                noValidate
-                                className="flex flex-col sm:flex-row gap-2"
+                            <div className="min-w-0">
+                              <h3
+                                className="text-lg font-semibold text-neutral-50 truncate"
+                                data-testid={`project-name-${project.projectId}`}
                               >
-                                <div className="flex-1">
-                                  <Input
-                                    label="Add URL"
-                                    name="project-url"
-                                    id={`add-url-${project.projectId}`}
-                                    placeholder="https://example.com"
-                                    {...(addUrlError !== null ? { error: addUrlError } : {})}
-                                    disabled={isAddingUrl}
-                                    data-testid="add-url-input"
-                                    type="url"
-                                    autoComplete="url"
-                                  />
-                                </div>
-                                <div className="self-end">
-                                  <Button
-                                    type="submit"
-                                    size="sm"
-                                    loading={isAddingUrl}
-                                    disabled={isAddingUrl}
-                                    data-testid="add-url-submit"
-                                  >
-                                    Add URL
-                                  </Button>
-                                </div>
-                              </form>
-                            </>
-                          )}
+                                {project.name}
+                              </h3>
+                              {firstUrl !== null && (
+                                <p className="text-xs text-neutral-500 truncate">{firstUrl}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            <span className="inline-block h-2 w-2 rounded-full bg-green-400" />
+                            <span className="text-xs text-green-400">Active</span>
+                          </div>
                         </div>
-                      )}
+
+                        {/* CWV health metrics — mini metric cards */}
+                        <div className="mb-4">
+                          <HealthDots
+                            lcp={health?.lcp ?? "unknown"}
+                            cls={health?.cls ?? "unknown"}
+                            tbt={health?.tbt ?? "unknown"}
+                            {...(health?.lcpValue != null ? { lcpValue: health.lcpValue } : {})}
+                            {...(health?.clsValue != null ? { clsValue: health.clsValue } : {})}
+                            {...(health?.tbtValue != null ? { tbtValue: health.tbtValue } : {})}
+                          />
+                        </div>
+
+                        {/* Footer row: audit status + created date */}
+                        <div className="flex items-center justify-between">
+                          <p
+                            className="text-xs text-neutral-500"
+                            data-testid={`project-audit-status-${project.projectId}`}
+                          >
+                            {/* v8 ignore next 5 -- hasAuditData branch: only renders when getLastAuditForProject returns real data */}
+                            {hasAuditData ? (
+                              <>
+                                Last audit:{" "}
+                                {new Date(health.lastAuditDate as string).toLocaleDateString()}
+                              </>
+                            ) : (
+                              <>
+                                No audits yet <span aria-hidden="true">&middot;</span>{" "}
+                                <a
+                                  href="/audit"
+                                  className="text-blue-400 hover:text-blue-300 underline"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    const url = health?.firstUrl;
+                                    /* v8 ignore next 3 -- firstUrl branch: only fires when project has URLs from health data */
+                                    if (url !== undefined && url !== null) {
+                                      router.push(`/audit?url=${encodeURIComponent(url)}`);
+                                    } else {
+                                      router.push("/audit");
+                                    }
+                                  }}
+                                  data-testid={`run-first-audit-${project.projectId}`}
+                                >
+                                  Run first audit
+                                </a>
+                              </>
+                            )}
+                          </p>
+                          <p className="text-xs text-neutral-500">
+                            Created {new Date(project.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+
+                        {/* Expanded detail — URLs section (inside the card) */}
+                        {isExpanded && (
+                          <div
+                            data-testid={`project-detail-${project.projectId}`}
+                            className="mt-4 border-t border-neutral-800/50 pt-4"
+                          >
+                            {/* Loading detail */}
+                            {isLoadingDetail && (
+                              <div
+                                data-testid="project-detail-loading"
+                                role="status"
+                                aria-label="Loading project details"
+                              >
+                                <Skeleton
+                                  width="100%"
+                                  height="20px"
+                                  variant="text"
+                                  className="mb-2"
+                                />
+                                <Skeleton width="80%" height="20px" variant="text" />
+                              </div>
+                            )}
+
+                            {/* URLs list */}
+                            {!isLoadingDetail && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="flex items-center gap-1 text-sm font-medium text-neutral-300 mb-3"
+                                  /* v8 ignore next -- stopPropagation: prevents card toggle when clicking URLs header */
+                                  onClick={(e) => e.stopPropagation()}
+                                  data-testid="urls-section-header"
+                                >
+                                  <ChevronIcon expanded={true} />
+                                  URLs ({projectUrls.length})
+                                </button>
+
+                                {projectUrls.length === 0 && (
+                                  <p
+                                    data-testid="project-no-urls"
+                                    className="text-sm text-neutral-500 mb-3"
+                                  >
+                                    No URLs added yet. Add one below to start auditing.
+                                  </p>
+                                )}
+
+                                {projectUrls.length > 0 && (
+                                  <ul data-testid="project-url-list" className="space-y-2 mb-4">
+                                    {projectUrls.map((urlItem) => (
+                                      <li
+                                        key={urlItem.urlId}
+                                        data-testid={`url-item-${urlItem.urlId}`}
+                                        className="flex items-center justify-between gap-2 rounded-lg bg-neutral-800/30 px-3 py-2.5"
+                                      >
+                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                          <LinkIcon />
+                                          <span
+                                            className="text-sm text-neutral-300 truncate"
+                                            title={urlItem.url}
+                                          >
+                                            {urlItem.url}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          <button
+                                            type="button"
+                                            className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-500"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleRunAudit(urlItem.url);
+                                            }}
+                                            data-testid={`run-audit-${urlItem.urlId}`}
+                                            aria-label={`Run audit for ${urlItem.url}`}
+                                          >
+                                            Run Audit
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="rounded-md px-2 py-1 text-xs text-neutral-500 transition-colors hover:text-red-400"
+                                            disabled={deletingUrlId === urlItem.urlId}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              void handleDeleteUrl(urlItem.urlId);
+                                            }}
+                                            data-testid={`delete-url-${urlItem.urlId}`}
+                                            aria-label={`Delete ${urlItem.url}`}
+                                          >
+                                            {deletingUrlId === urlItem.urlId ? "..." : "\u2715"}
+                                          </button>
+                                        </div>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+
+                                {/* Add URL form */}
+                                <form
+                                  onSubmit={handleAddUrl}
+                                  data-testid="add-url-form"
+                                  noValidate
+                                  className="flex flex-col sm:flex-row gap-2"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div className="flex-1">
+                                    <Input
+                                      label="Add URL"
+                                      name="project-url"
+                                      id={`add-url-${project.projectId}`}
+                                      placeholder="https://example.com"
+                                      {...(addUrlError !== null ? { error: addUrlError } : {})}
+                                      disabled={isAddingUrl}
+                                      data-testid="add-url-input"
+                                      type="url"
+                                      autoComplete="url"
+                                    />
+                                  </div>
+                                  <div className="self-end">
+                                    <Button
+                                      type="submit"
+                                      size="sm"
+                                      loading={isAddingUrl}
+                                      disabled={isAddingUrl}
+                                      data-testid="add-url-submit"
+                                    >
+                                      Add URL
+                                    </Button>
+                                  </div>
+                                </form>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

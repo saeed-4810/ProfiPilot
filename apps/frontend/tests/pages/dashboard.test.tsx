@@ -15,12 +15,14 @@ const mockCreateProject = vi.fn();
 const mockGetProject = vi.fn();
 const mockAddUrlToProject = vi.fn();
 const mockDeleteUrl = vi.fn();
+const mockGetLastAuditForProject = vi.fn();
 vi.mock("@/lib/projects", () => ({
   listProjects: (...args: unknown[]) => mockListProjects(...args),
   createProject: (...args: unknown[]) => mockCreateProject(...args),
   getProject: (...args: unknown[]) => mockGetProject(...args),
   addUrlToProject: (...args: unknown[]) => mockAddUrlToProject(...args),
   deleteUrl: (...args: unknown[]) => mockDeleteUrl(...args),
+  getLastAuditForProject: (...args: unknown[]) => mockGetLastAuditForProject(...args),
   COPY_DASHBOARD_EMPTY: "Create your first project to start auditing your web performance.",
   COPY_URL_VALIDATION_ERROR: "Please enter a valid URL including https://",
   COPY_PROJECT_NAME_REQUIRED: "Project name is required.",
@@ -37,6 +39,17 @@ import DashboardPage from "../../app/(authenticated)/dashboard/page";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: health data returns unknown (no audits)
+  mockGetLastAuditForProject.mockResolvedValue({
+    lcp: "unknown",
+    cls: "unknown",
+    tbt: "unknown",
+    lcpValue: null,
+    clsValue: null,
+    tbtValue: null,
+    lastAuditDate: null,
+    firstUrl: null,
+  });
 });
 
 afterEach(() => {
@@ -677,6 +690,81 @@ describe("T-PERF-125-005: Unauthenticated request returns 401 → redirect to /l
 });
 
 /* ================================================================== */
+/* P-PERF-144-001: Project cards show HealthDots component             */
+/* ================================================================== */
+
+describe("P-PERF-144-001: Project cards show HealthDots and audit status", () => {
+  it("renders HealthDots with 'No audits yet' text on project cards", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "Test Site" })])
+    );
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-proj-1")).toBeInTheDocument();
+      // HealthDots shows "No audits yet" since all statuses are unknown
+      const card = screen.getByTestId("project-card-proj-1");
+      expect(card).toHaveTextContent("No audits yet");
+    });
+  });
+
+  it("renders 'Run first audit' link on project cards", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "Test Site" })])
+    );
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("run-first-audit-proj-1")).toBeInTheDocument();
+      expect(screen.getByTestId("run-first-audit-proj-1")).toHaveTextContent("Run first audit");
+    });
+  });
+
+  it("navigates to /audit when 'Run first audit' is clicked", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "Test Site" })])
+    );
+
+    const user = userEvent.setup();
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("run-first-audit-proj-1")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("run-first-audit-proj-1"));
+
+    expect(mockPush).toHaveBeenCalledWith("/audit");
+  });
+
+  it("shows audit status section with data-testid", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "Test Site" })])
+    );
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-audit-status-proj-1")).toBeInTheDocument();
+    });
+  });
+
+  it("renders health-dots testid on project cards", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "Test Site" })])
+    );
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("health-dots")).toBeInTheDocument();
+    });
+  });
+});
+
+/* ================================================================== */
 /* E-DASH-001: Dashboard page renders (covered by unit tests)          */
 /* ================================================================== */
 
@@ -1211,6 +1299,110 @@ describe("Toast dismiss", () => {
 
     await waitFor(() => {
       expect(screen.queryByText("Project created successfully.")).not.toBeInTheDocument();
+    });
+  });
+});
+
+/* ================================================================== */
+/* Additional: Keyboard navigation on project cards                    */
+/* ================================================================== */
+
+describe("Keyboard navigation on project cards", () => {
+  it("toggles project detail when Enter is pressed on a card", async () => {
+    mockListProjects.mockResolvedValue(makeProjectList([makeProject()]));
+    mockGetProject.mockResolvedValue(makeProjectDetail([]));
+
+    const user = userEvent.setup();
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-proj-1")).toBeInTheDocument();
+    });
+
+    // Focus the card and press Enter
+    screen.getByTestId("project-card-proj-1").focus();
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-detail-proj-1")).toBeInTheDocument();
+    });
+  });
+
+  it("toggles project detail when Space is pressed on a card", async () => {
+    mockListProjects.mockResolvedValue(makeProjectList([makeProject()]));
+    mockGetProject.mockResolvedValue(makeProjectDetail([]));
+
+    const user = userEvent.setup();
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-proj-1")).toBeInTheDocument();
+    });
+
+    // Focus the card and press Space
+    screen.getByTestId("project-card-proj-1").focus();
+    await user.keyboard(" ");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-detail-proj-1")).toBeInTheDocument();
+    });
+  });
+});
+
+/* ================================================================== */
+/* Additional: Project card shows firstUrl subtitle                    */
+/* ================================================================== */
+
+describe("Project card firstUrl subtitle", () => {
+  it("shows firstUrl as subtitle when health data has a URL", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "Test Site" })])
+    );
+    mockGetLastAuditForProject.mockResolvedValue({
+      lcp: "unknown",
+      cls: "unknown",
+      tbt: "unknown",
+      lcpValue: null,
+      clsValue: null,
+      tbtValue: null,
+      lastAuditDate: null,
+      firstUrl: "https://www.example.com",
+    });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("https://www.example.com")).toBeInTheDocument();
+    });
+  });
+});
+
+/* ================================================================== */
+/* Additional: Project card shows metric values from health data       */
+/* ================================================================== */
+
+describe("Project card metric values", () => {
+  it("passes metric values to HealthDots when health data has values", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "Test Site" })])
+    );
+    mockGetLastAuditForProject.mockResolvedValue({
+      lcp: "good",
+      cls: "good",
+      tbt: "good",
+      lcpValue: "2.1s",
+      clsValue: "0.05",
+      tbtValue: "150ms",
+      lastAuditDate: "2026-03-24T00:00:00Z",
+      firstUrl: "https://www.example.com",
+    });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("2.1s")).toBeInTheDocument();
+      expect(screen.getByText("0.05")).toBeInTheDocument();
+      expect(screen.getByText("150ms")).toBeInTheDocument();
     });
   });
 });

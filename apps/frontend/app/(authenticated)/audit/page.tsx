@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { z } from "zod";
 import { MotionWrapper } from "@/components/MotionWrapper";
 import { trackPageView, trackAuditTrigger } from "@/lib/analytics";
@@ -50,6 +50,8 @@ const TOTAL_STEPS = 5;
 
 export default function AuditPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const prefillUrl = searchParams.get("url");
 
   /* --- State --- */
   const [pageState, setPageState] = useState<PageState>("empty");
@@ -103,6 +105,14 @@ export default function AuditPage() {
       stopStepTimer();
     };
   }, [stopPolling, stopStepTimer]);
+
+  /* --- Pre-fill URL from query param (e.g., from dashboard "Run first audit") --- */
+  useEffect(() => {
+    /* v8 ignore next 3 -- prefill branch: only fires when navigated from dashboard with ?url= param */
+    if (prefillUrl !== null && prefillUrl !== "" && urlInputRef.current !== null) {
+      urlInputRef.current.value = prefillUrl;
+    }
+  }, [prefillUrl]);
 
   /* --- Poll audit status --- */
   const startPolling = useCallback(

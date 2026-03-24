@@ -288,9 +288,9 @@ describe("Firestore indexes — structural validation", () => {
     expect(summariesIndex?.queryScope).toBe("COLLECTION");
   });
 
-  it("has exactly 4 composite indexes", () => {
+  it("has exactly 5 composite indexes", () => {
     const indexes = indexesContent["indexes"] as unknown[];
-    expect(indexes).toHaveLength(4);
+    expect(indexes).toHaveLength(5);
   });
 });
 

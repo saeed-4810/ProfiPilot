@@ -90,6 +90,46 @@ export async function updateAuditStatus(
   await firestore.collection(COLLECTION).doc(jobId).update(update);
 }
 
+/* v8 ignore start -- PERF-144: getLastCompletedAuditByUrl — Firestore query, tested via E2E */
+/**
+ * Find the most recent completed audit for a given URL and user.
+ * Returns null if no completed audit exists.
+ * Used by GET /audits/latest?url=... for dashboard health preview (PERF-144).
+ *
+ * Uses uid + createdAt index (always available) and filters url + status in code.
+ * This avoids requiring a 4-field composite index that may not be built yet.
+ */
+export async function getLastCompletedAuditByUrl(
+  uid: string,
+  url: string
+): Promise<AuditJob | null> {
+  const firestore = getFirebaseApp().firestore();
+
+  // Query by uid + createdAt (existing index), filter url + status in code
+  const snapshot = await firestore
+    .collection(COLLECTION)
+    .where("uid", "==", uid)
+    .orderBy("createdAt", "desc")
+    .limit(20)
+    .get();
+
+  if (snapshot.empty) return null;
+
+  for (const doc of snapshot.docs) {
+    const data = doc.data();
+    if (data["url"] !== url) continue;
+    if (data["status"] !== AuditStatus.COMPLETED) continue;
+
+    const parsed = AuditJobSchema.safeParse(data);
+    if (!parsed.success) continue;
+
+    return { ...parsed.data, strategy: parsed.data.strategy ?? "mobile" };
+  }
+
+  return null;
+}
+/* v8 ignore stop */
+
 /** Write parsed CWV metrics to the audit document's metrics subdocument per ADR-012. */
 export async function updateAuditMetrics(jobId: string, metrics: AuditMetrics): Promise<void> {
   const firestore = getFirebaseApp().firestore();

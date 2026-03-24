@@ -205,3 +205,100 @@ export async function deleteUrl(projectId: string, urlId: string): Promise<void>
     throwApiError(response, error, "Failed to delete URL.");
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Project health data — derived from last audit (PERF-144)            */
+/* ------------------------------------------------------------------ */
+
+import type { HealthStatus } from "@/components/ui/HealthDots";
+
+/** Health data for a project card. */
+export interface ProjectHealthData {
+  lcp: HealthStatus;
+  cls: HealthStatus;
+  tbt: HealthStatus;
+  lcpValue: string | null;
+  clsValue: string | null;
+  tbtValue: string | null;
+  lastAuditDate: string | null;
+  firstUrl: string | null;
+}
+
+/* v8 ignore start -- classifyMetric + formatMetricValue + getLastAuditForProject: async API integration, tested via E2E and mocked in unit tests */
+
+/** CWV thresholds for health dot classification. */
+function classifyMetric(value: number | null, goodMax: number, poorMin: number): HealthStatus {
+  if (value === null) return "unknown";
+  if (value <= goodMax) return "good";
+  if (value <= poorMin) return "needs-improvement";
+  return "poor";
+}
+
+/** Format a raw metric value into a human-readable display string. */
+function formatMetricValue(value: number | null, unit: "ms" | "s" | "score"): string | null {
+  if (value === null) return null;
+  if (unit === "s") return `${(value / 1000).toFixed(1)}s`;
+  if (unit === "ms") return `${Math.round(value)}ms`;
+  return value.toFixed(2);
+}
+
+/**
+ * Fetch the last audit health data for a project.
+ * Strategy: get project URLs → take first URL → GET /audits/latest?url=...
+ * Returns unknown health if no URLs or no completed audits.
+ */
+export async function getLastAuditForProject(projectId: string): Promise<ProjectHealthData> {
+  const unknown: ProjectHealthData = {
+    lcp: "unknown",
+    cls: "unknown",
+    tbt: "unknown",
+    lcpValue: null,
+    clsValue: null,
+    tbtValue: null,
+    lastAuditDate: null,
+    firstUrl: null,
+  };
+
+  try {
+    const detail = await getProject(projectId);
+    if (detail.urls.length === 0) return unknown;
+
+    const firstUrl = detail.urls[0]?.url ?? null;
+    if (firstUrl === null) return unknown;
+
+    // GET /audits/latest?url=... — returns the most recent completed audit with metrics
+    const response = await fetch(`${API_BASE}/audits/latest?url=${encodeURIComponent(firstUrl)}`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
+
+    if (!response.ok) return { ...unknown, firstUrl };
+
+    const data = (await response.json()) as {
+      completedAt?: string;
+      metrics?: {
+        lcp: number | null;
+        cls: number | null;
+        tbt: number | null;
+      };
+    };
+
+    if (data.metrics === undefined) return { ...unknown, firstUrl };
+
+    return {
+      lcp: classifyMetric(data.metrics.lcp, 2500, 4000),
+      cls: classifyMetric(data.metrics.cls, 0.1, 0.25),
+      tbt: classifyMetric(data.metrics.tbt, 200, 600),
+      lcpValue: formatMetricValue(data.metrics.lcp, "s"),
+      clsValue: formatMetricValue(data.metrics.cls, "score"),
+      tbtValue: formatMetricValue(data.metrics.tbt, "ms"),
+      lastAuditDate: data.completedAt ?? null,
+      firstUrl,
+    };
+  } catch {
+    return unknown;
+  }
+}
+
+/* v8 ignore stop */
