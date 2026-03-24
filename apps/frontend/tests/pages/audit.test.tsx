@@ -884,45 +884,47 @@ describe("PERF-142: Step timer caps at penultimate step", () => {
 /* PERF-155: Engine Settings — strategy toggle                         */
 /* ================================================================== */
 
-describe("PERF-155: Engine Settings strategy toggle", () => {
-  it("renders engine settings panel", () => {
+describe("PERF-155: Engine Settings strategy select", () => {
+  it("renders engine settings row", () => {
     render(<AuditPage />);
     expect(screen.getByTestId("engine-settings")).toBeInTheDocument();
     expect(screen.getByText("Engine Settings")).toBeInTheDocument();
   });
 
-  it("renders three strategy buttons: Mobile, Desktop, Both", () => {
+  it("renders strategy select with three options", () => {
     render(<AuditPage />);
-    expect(screen.getByTestId("strategy-mobile")).toBeInTheDocument();
-    expect(screen.getByTestId("strategy-desktop")).toBeInTheDocument();
-    expect(screen.getByTestId("strategy-both")).toBeInTheDocument();
+    const select = screen.getByTestId("strategy-select");
+    expect(select).toBeInTheDocument();
+    expect(select).toHaveAttribute("aria-label", "Analysis profile");
+
+    const options = select.querySelectorAll("option");
+    expect(options).toHaveLength(3);
+    expect(options[0]).toHaveValue("mobile");
+    expect(options[1]).toHaveValue("desktop");
+    expect(options[2]).toHaveValue("both");
   });
 
-  it("defaults to Mobile strategy selected", () => {
+  it("defaults to Mobile Emulation", () => {
     render(<AuditPage />);
-    expect(screen.getByTestId("strategy-mobile")).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByTestId("strategy-desktop")).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByTestId("strategy-both")).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("strategy-select")).toHaveValue("mobile");
   });
 
-  it("selects Desktop strategy when clicked", async () => {
+  it("selects Desktop when changed", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<AuditPage />);
 
-    await user.click(screen.getByTestId("strategy-desktop"));
+    await user.selectOptions(screen.getByTestId("strategy-select"), "desktop");
 
-    expect(screen.getByTestId("strategy-desktop")).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByTestId("strategy-mobile")).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("strategy-select")).toHaveValue("desktop");
   });
 
-  it("selects Both strategy when clicked", async () => {
+  it("selects Both when changed", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<AuditPage />);
 
-    await user.click(screen.getByTestId("strategy-both"));
+    await user.selectOptions(screen.getByTestId("strategy-select"), "both");
 
-    expect(screen.getByTestId("strategy-both")).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByTestId("strategy-mobile")).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("strategy-select")).toHaveValue("both");
   });
 
   it("sends selected strategy with audit submission", async () => {
@@ -936,7 +938,7 @@ describe("PERF-155: Engine Settings strategy toggle", () => {
     render(<AuditPage />);
 
     // Select desktop strategy
-    await user.click(screen.getByTestId("strategy-desktop"));
+    await user.selectOptions(screen.getByTestId("strategy-select"), "desktop");
 
     // Fill URL and submit
     const input = screen.getByTestId("audit-url-input");
@@ -967,20 +969,6 @@ describe("PERF-155: Engine Settings strategy toggle", () => {
     await waitFor(() => {
       expect(mockCreateAudit).toHaveBeenCalledWith("https://example.com", "mobile");
     });
-  });
-
-  it("can switch back to Mobile after selecting another strategy", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<AuditPage />);
-
-    // Switch to desktop
-    await user.click(screen.getByTestId("strategy-desktop"));
-    expect(screen.getByTestId("strategy-desktop")).toHaveAttribute("aria-pressed", "true");
-
-    // Switch back to mobile
-    await user.click(screen.getByTestId("strategy-mobile"));
-    expect(screen.getByTestId("strategy-mobile")).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByTestId("strategy-desktop")).toHaveAttribute("aria-pressed", "false");
   });
 
   it("shows Engine Ready status indicator", () => {

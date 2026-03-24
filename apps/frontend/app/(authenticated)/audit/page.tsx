@@ -456,115 +456,52 @@ export default function AuditPage() {
                       </p>
                     )}
 
-                    {/* Engine Settings — Stitch-inspired panel */}
-                    <div data-testid="engine-settings">
-                      {/* Header row */}
-                      <div className="flex items-center justify-between px-2 mb-4">
-                        <div className="flex items-center gap-2 text-xs text-gray-500 font-medium uppercase tracking-wider">
+                    {/* Engine Settings — Stitch-inspired row */}
+                    <div
+                      data-testid="engine-settings"
+                      className="flex items-center justify-between px-2"
+                    >
+                      <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
                           <span className="material-symbols-outlined text-base" aria-hidden="true">
                             settings_input_component
                           </span>
                           <span>Engine Settings</span>
                         </div>
-                        <div className="flex items-center gap-4 text-[11px] text-gray-600">
-                          <span className="flex items-center gap-1">
-                            <span className="w-1 h-1 rounded-full bg-[#4ae176]" />
-                            Engine Ready
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <span className="material-symbols-outlined text-xs" aria-hidden="true">
-                              history
-                            </span>
-                            0 audits today
+
+                        {/* Strategy select */}
+                        <div className="relative">
+                          <select
+                            value={strategy}
+                            onChange={(e) => setStrategy(e.target.value as AuditStrategy)}
+                            data-testid="strategy-select"
+                            aria-label="Analysis profile"
+                            className="appearance-none bg-[#18181a] border border-white/[0.06] rounded-lg text-sm text-[#e5e2e3] pl-3 pr-8 py-1.5 outline-none focus:border-[#adc6ff]/40 transition-colors cursor-pointer"
+                          >
+                            <option value="mobile">Mobile Emulation</option>
+                            <option value="desktop">Desktop</option>
+                            <option value="both">Both (Mobile + Desktop)</option>
+                          </select>
+                          <span
+                            className="material-symbols-outlined text-sm text-gray-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"
+                            aria-hidden="true"
+                          >
+                            expand_more
                           </span>
                         </div>
                       </div>
 
-                      {/* Strategy toggle — 3 options */}
-                      <div className="grid grid-cols-3 gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setStrategy("mobile")}
-                          data-testid="strategy-mobile"
-                          aria-pressed={strategy === "mobile"}
-                          className={`p-4 rounded-xl border text-left transition-all ${
-                            strategy === "mobile"
-                              ? "border-[#adc6ff]/30 bg-[#adc6ff]/5"
-                              : "border-white/[0.06] bg-[#18181a] hover:border-white/10"
-                          }`}
-                        >
-                          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">
-                            Analysis Profile
-                          </p>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-[#e5e2e3]">Mobile</span>
-                            <span
-                              className={`w-8 h-4 rounded-full flex items-center transition-colors ${
-                                strategy === "mobile"
-                                  ? "bg-[#4ae176] justify-end"
-                                  : "bg-gray-700 justify-start"
-                              }`}
-                            >
-                              <span className="w-3 h-3 rounded-full bg-white mx-0.5" />
-                            </span>
-                          </div>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setStrategy("desktop")}
-                          data-testid="strategy-desktop"
-                          aria-pressed={strategy === "desktop"}
-                          className={`p-4 rounded-xl border text-left transition-all ${
-                            strategy === "desktop"
-                              ? "border-[#adc6ff]/30 bg-[#adc6ff]/5"
-                              : "border-white/[0.06] bg-[#18181a] hover:border-white/10"
-                          }`}
-                        >
-                          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">
-                            Analysis Profile
-                          </p>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-[#e5e2e3]">Desktop</span>
-                            <span
-                              className={`w-8 h-4 rounded-full flex items-center transition-colors ${
-                                strategy === "desktop"
-                                  ? "bg-[#4ae176] justify-end"
-                                  : "bg-gray-700 justify-start"
-                              }`}
-                            >
-                              <span className="w-3 h-3 rounded-full bg-white mx-0.5" />
-                            </span>
-                          </div>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setStrategy("both")}
-                          data-testid="strategy-both"
-                          aria-pressed={strategy === "both"}
-                          className={`p-4 rounded-xl border text-left transition-all ${
-                            strategy === "both"
-                              ? "border-[#adc6ff]/30 bg-[#adc6ff]/5"
-                              : "border-white/[0.06] bg-[#18181a] hover:border-white/10"
-                          }`}
-                        >
-                          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">
-                            Analysis Profile
-                          </p>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-[#e5e2e3]">Both</span>
-                            <span
-                              className={`w-8 h-4 rounded-full flex items-center transition-colors ${
-                                strategy === "both"
-                                  ? "bg-[#4ae176] justify-end"
-                                  : "bg-gray-700 justify-start"
-                              }`}
-                            >
-                              <span className="w-3 h-3 rounded-full bg-white mx-0.5" />
-                            </span>
-                          </div>
-                        </button>
+                      <div className="flex items-center gap-4 text-[11px] text-gray-600">
+                        <span className="flex items-center gap-1">
+                          <span className="w-1 h-1 rounded-full bg-[#4ae176]" />
+                          Engine Ready
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs" aria-hidden="true">
+                            history
+                          </span>
+                          0 audits today
+                        </span>
                       </div>
                     </div>
                   </div>
