@@ -481,8 +481,8 @@ export default function AuditPage() {
                         </div>
                       </div>
 
-                      {/* Strategy dropdown card — Stitch style */}
-                      <div className="relative" data-testid="strategy-dropdown">
+                      {/* Strategy dropdown card — Stitch style, 1/3 width */}
+                      <div className="relative w-1/3" data-testid="strategy-dropdown">
                         <button
                           type="button"
                           onClick={() => setStrategyOpen((prev) => !prev)}
