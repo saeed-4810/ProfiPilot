@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -376,5 +376,34 @@ describe("U-SHELL-003: Navigation responsive on mobile (drawer)", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("nav-mobile-menu")).not.toBeInTheDocument();
     });
+  });
+
+  it("closes drawer when Escape key is pressed on backdrop", async () => {
+    const user = userEvent.setup();
+    render(<Navigation />);
+
+    await user.click(screen.getByTestId("nav-mobile-toggle"));
+    expect(screen.getByTestId("nav-mobile-menu")).toBeInTheDocument();
+
+    // Fire keyDown Escape on the backdrop element
+    fireEvent.keyDown(screen.getByTestId("mobile-backdrop"), { key: "Escape" });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("nav-mobile-menu")).not.toBeInTheDocument();
+    });
+  });
+
+  it("does not close drawer on non-Escape key press on backdrop", async () => {
+    const user = userEvent.setup();
+    render(<Navigation />);
+
+    await user.click(screen.getByTestId("nav-mobile-toggle"));
+    expect(screen.getByTestId("nav-mobile-menu")).toBeInTheDocument();
+
+    // Fire keyDown with a non-Escape key on the backdrop
+    fireEvent.keyDown(screen.getByTestId("mobile-backdrop"), { key: "a" });
+
+    // Drawer should still be open
+    expect(screen.getByTestId("nav-mobile-menu")).toBeInTheDocument();
   });
 });

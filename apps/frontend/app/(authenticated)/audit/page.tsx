@@ -1,5 +1,31 @@
 "use client";
 
+/**
+ * Audit page — Stitch "Audit Setup v1" design.
+ *
+ * PERF-155: Redesign audit page to match Stitch hero input card layout.
+ *
+ * Layout: Centered "New Audit" hero → elevated input card with link icon
+ * prefix + Run Audit CTA → progress/error/success states below card.
+ *
+ * All business logic preserved from original implementation:
+ * - Zod URL validation (HTTPS only)
+ * - createAudit → polling → redirect to /results
+ * - 5-state page model (empty/loading/success/error/blocked)
+ * - AuditProgress stepper for loading/error states
+ * - Retry handler
+ * - Analytics: trackPageView on mount, trackAuditTrigger on submit
+ * - ?url= prefill from dashboard
+ *
+ * Stitch design tokens:
+ * - bg-[#141314] (surface-container-low) for input card
+ * - border-white/[0.06] card border
+ * - bg-[#18181a] (surface-container) for input field
+ * - bg-[#adc6ff] text-[#002e6a] for Run Audit button
+ * - text-4xl font-light tracking-tight for heading
+ * - Manrope font (inherited from root layout)
+ */
+
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { z } from "zod";
@@ -234,23 +260,34 @@ export default function AuditPage() {
 
   return (
     <MotionWrapper>
-      <main
-        data-testid="audit-page"
-        className="min-h-screen flex flex-col items-center justify-center p-8 bg-neutral-950 text-neutral-50"
-      >
-        <div className="w-full max-w-md">
-          <h1 className="text-3xl font-bold mb-2 text-center">Audit</h1>
+      <div data-testid="audit-page" className="min-h-screen px-4 md:px-10 pb-20 pt-16">
+        <div className="max-w-5xl mx-auto">
+          {/* -------------------------------------------------------- */}
+          {/* Hero heading — Stitch: centered, light weight            */}
+          {/* -------------------------------------------------------- */}
+          <div className="mb-16 text-center">
+            <h1 className="text-4xl font-light tracking-tight text-[#e5e2e3] mb-3">New Audit</h1>
 
-          {/* copy: onboarding-helper — shown in empty state */}
-          {pageState === "empty" && (
-            <p data-testid="audit-helper" className="text-neutral-400 text-sm text-center mb-6">
-              {COPY_ONBOARDING_HELPER}
-            </p>
-          )}
+            {/* copy: onboarding-helper — shown in empty state */}
+            {pageState === "empty" && (
+              <p data-testid="audit-helper" className="text-gray-500 text-lg font-light">
+                {COPY_ONBOARDING_HELPER}
+              </p>
+            )}
 
+            {/* Subtitle for non-empty states */}
+            {pageState !== "empty" && (
+              <p className="text-gray-500 text-lg font-light">
+                Enter a URL to begin your analysis.
+              </p>
+            )}
+          </div>
+
+          {/* -------------------------------------------------------- */}
           {/* Error state with progress indicator showing failure point */}
+          {/* -------------------------------------------------------- */}
           {pageState === "error" && auditStatus !== null && auditStatus !== "queued" && (
-            <div data-testid="audit-error-progress" className="mb-4">
+            <div data-testid="audit-error-progress" className="max-w-2xl mx-auto mb-8">
               <AuditProgress
                 currentStep={progressStep}
                 failed={true}
@@ -269,74 +306,98 @@ export default function AuditPage() {
                 role="alert"
                 tabIndex={-1}
                 data-testid="audit-error"
-                className="mb-4 p-3 rounded bg-red-900/50 border border-red-500 text-red-200 text-sm"
+                className="max-w-2xl mx-auto mb-8 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm flex items-start gap-3"
               >
-                {error}
+                <span
+                  className="material-symbols-outlined text-red-400 mt-0.5 shrink-0"
+                  aria-hidden="true"
+                >
+                  error
+                </span>
+                <span>{error}</span>
               </div>
             )}
 
-          {/* URL submission form — visible in empty and error states */}
+          {/* -------------------------------------------------------- */}
+          {/* Elevated input card — Stitch design                      */}
+          {/* -------------------------------------------------------- */}
           {(pageState === "empty" || pageState === "error") && (
-            <form onSubmit={handleSubmit} noValidate>
-              <div className="mb-4">
-                <label
-                  htmlFor="audit-url"
-                  className="block text-sm font-medium text-neutral-300 mb-1"
-                >
-                  Website URL
-                </label>
-                <input
-                  ref={urlInputRef}
-                  id="audit-url"
-                  name="url"
-                  type="url"
-                  autoComplete="url"
-                  required
-                  aria-invalid={fieldError !== null ? "true" : undefined}
-                  aria-describedby={fieldError !== null ? "url-error" : undefined}
-                  disabled={isLoading}
-                  data-testid="audit-url-input"
-                  className="w-full px-3 py-2 rounded bg-neutral-800 border border-neutral-700 text-neutral-50 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                  placeholder="https://example.com"
-                />
-                {/* copy: url-validation-error — inline field error */}
-                {fieldError !== null && (
-                  <p
-                    id="url-error"
-                    data-testid="audit-field-error"
-                    className="mt-1 text-sm text-red-400"
-                  >
-                    {fieldError}
-                  </p>
-                )}
-              </div>
+            <div className="relative">
+              <div className="bg-[#141314] border border-white/[0.06] rounded-2xl p-4 md:p-6 shadow-2xl">
+                <form onSubmit={handleSubmit} noValidate>
+                  <div className="flex flex-col gap-6">
+                    {/* URL input + Run Audit button row */}
+                    <div className="flex flex-col md:flex-row gap-3">
+                      <div className="relative flex-1 group">
+                        {/* Link icon prefix */}
+                        <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none text-gray-500 group-focus-within:text-[#adc6ff] transition-colors">
+                          <span className="material-symbols-outlined text-xl" aria-hidden="true">
+                            link
+                          </span>
+                        </div>
+                        <input
+                          ref={urlInputRef}
+                          id="audit-url"
+                          name="url"
+                          type="url"
+                          autoComplete="url"
+                          required
+                          aria-label="Website URL"
+                          aria-invalid={fieldError !== null ? "true" : undefined}
+                          aria-describedby={fieldError !== null ? "url-error" : undefined}
+                          disabled={isLoading}
+                          data-testid="audit-url-input"
+                          className="w-full bg-[#18181a] border border-white/[0.03] focus:border-[#adc6ff]/40 focus:ring-0 h-14 pl-14 pr-4 rounded-xl text-base placeholder:text-gray-600 transition-all outline-none text-[#e5e2e3]"
+                          placeholder="https://example.com"
+                        />
+                      </div>
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                data-testid="audit-submit"
-                className="w-full py-2 px-4 rounded bg-blue-600 text-white font-medium hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Run Audit
-              </button>
-            </form>
+                      {/* Run Audit button — Stitch primary style */}
+                      <button
+                        type="submit"
+                        disabled={isLoading}
+                        data-testid="audit-submit"
+                        className="h-14 px-10 bg-[#adc6ff] text-[#002e6a] font-medium text-base rounded-xl hover:bg-[#d8e2ff] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#adc6ff]/5 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Run Audit
+                      </button>
+                    </div>
+
+                    {/* Field error — inline below input inside card */}
+                    {fieldError !== null && (
+                      <p
+                        id="url-error"
+                        data-testid="audit-field-error"
+                        className="text-sm text-red-400 px-2 -mt-4"
+                      >
+                        {fieldError}
+                      </p>
+                    )}
+                  </div>
+                </form>
+              </div>
+            </div>
           )}
 
-          {/* Loading / progress state — multi-step progress indicator (PERF-142) */}
+          {/* -------------------------------------------------------- */}
+          {/* Loading / progress state — multi-step progress (PERF-142)*/}
+          {/* -------------------------------------------------------- */}
           {pageState === "loading" && (
-            <div data-testid="audit-progress" className="mt-6">
+            <div data-testid="audit-progress" className="max-w-2xl mx-auto mt-8">
               <AuditProgress currentStep={progressStep} failed={false} />
               {jobId !== null && (
-                <p data-testid="audit-job-id" className="text-neutral-500 text-xs text-center mt-4">
+                <p data-testid="audit-job-id" className="text-gray-600 text-xs text-center mt-4">
                   Job: {jobId}
                 </p>
               )}
             </div>
           )}
 
-          {/* Success state — all steps completed, redirecting */}
+          {/* -------------------------------------------------------- */}
+          {/* Success state — all steps completed, redirecting          */}
+          {/* -------------------------------------------------------- */}
           {pageState === "success" && (
-            <div data-testid="audit-success" className="mt-6">
+            <div data-testid="audit-success" className="max-w-2xl mx-auto mt-8">
               <AuditProgress currentStep={TOTAL_STEPS - 1} failed={false} />
               <p
                 data-testid="audit-status-message"
@@ -344,25 +405,27 @@ export default function AuditPage() {
               >
                 {COPY_AUDIT_COMPLETED}
               </p>
-              <p className="text-neutral-500 text-xs text-center mt-1">Redirecting to results...</p>
+              <p className="text-gray-600 text-xs text-center mt-1">Redirecting to results...</p>
             </div>
           )}
 
-          {/* Error state — retry CTA */}
+          {/* -------------------------------------------------------- */}
+          {/* Error state — retry CTA                                  */}
+          {/* -------------------------------------------------------- */}
           {pageState === "error" && (
-            <div className="mt-4 flex justify-center">
+            <div className="mt-6 flex justify-center">
               <button
                 type="button"
                 onClick={handleRetry}
                 data-testid="audit-retry"
-                className="py-2 px-4 rounded bg-neutral-700 text-neutral-200 font-medium hover:bg-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                className="h-12 px-8 rounded-xl bg-white/5 border border-white/[0.06] text-[#e5e2e3] font-medium hover:bg-white/10 transition-all"
               >
                 Try Again
               </button>
             </div>
           )}
         </div>
-      </main>
+      </div>
     </MotionWrapper>
   );
 }
