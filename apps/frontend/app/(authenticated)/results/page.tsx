@@ -13,6 +13,7 @@ import { ResultsListSkeleton } from "@/components/ui/ResultsListSkeleton";
 import { Button } from "@/components/ui/Button";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { getAuditStatus, type AuditMetrics } from "@/lib/audit";
+import { listProjects, getProject, getLatestAuditForUrl, type UrlAuditInfo } from "@/lib/projects";
 import { SourceRef } from "@/components/ui/SourceRef";
 import {
   getRecommendations,
@@ -44,6 +45,7 @@ import {
 
 type PageState =
   | "loading"
+  | "browse"
   | "success"
   | "empty"
   | "error"
@@ -171,6 +173,13 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
 /* ResultsPage component                                               */
 /* ------------------------------------------------------------------ */
 
+/** A URL with completed audit data for the browse list. */
+interface AuditedUrl {
+  url: string;
+  projectName: string;
+  auditId: string;
+}
+
 export default function ResultsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -184,6 +193,9 @@ export default function ResultsPage() {
   const [auditMetrics, setAuditMetrics] = useState<AuditMetrics | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [expandedRecs, setExpandedRecs] = useState<Set<number>>(new Set());
+
+  /* --- Browse state: list of audited URLs when no ?id= param --- */
+  const [auditedUrls, setAuditedUrls] = useState<AuditedUrl[]>([]);
 
   /* --- Refs --- */
   const errorRef = useRef<HTMLDivElement>(null);
@@ -201,10 +213,49 @@ export default function ResultsPage() {
     });
   }, []);
 
+  /* --- Fetch browse list (all audited URLs across projects) --- */
+  const fetchBrowseList = useCallback(async () => {
+    setPageState("loading");
+    try {
+      const projectList = await listProjects();
+      if (projectList.items.length === 0) {
+        setAuditedUrls([]);
+        setPageState("browse");
+        return;
+      }
+
+      // For each project, get URLs and check for completed audits
+      const allAudited: AuditedUrl[] = [];
+      const projectDetails = await Promise.all(
+        projectList.items.map(async (p) => {
+          const detail = await getProject(p.projectId);
+          return { name: p.name, urls: detail.urls };
+        })
+      );
+
+      const auditChecks = projectDetails.flatMap((proj) =>
+        proj.urls.map(async (u) => {
+          const info: UrlAuditInfo = await getLatestAuditForUrl(u.url);
+          if (info.hasAuditData && info.auditId !== null) {
+            allAudited.push({ url: u.url, projectName: proj.name, auditId: info.auditId });
+          }
+        })
+      );
+      await Promise.all(auditChecks);
+
+      setAuditedUrls(allAudited);
+      setPageState("browse");
+      /* v8 ignore next 4 -- defensive: browse list fetch failure falls back to empty state */
+    } catch {
+      setAuditedUrls([]);
+      setPageState("browse");
+    }
+  }, []);
+
   /* --- Fetch data --- */
   const fetchResults = useCallback(async () => {
     if (auditId === null || auditId === "") {
-      setPageState("not-found");
+      void fetchBrowseList();
       return;
     }
 
@@ -262,7 +313,7 @@ export default function ResultsPage() {
       /* v8 ignore next -- errorRef may be null in test environment */
       setTimeout(() => errorRef.current?.focus(), 50);
     }
-  }, [auditId, router]);
+  }, [auditId, fetchBrowseList, router]);
 
   /* --- Initial load --- */
   useEffect(() => {
@@ -351,6 +402,57 @@ export default function ResultsPage() {
               >
                 Try Again
               </Button>
+            </div>
+          )}
+
+          {/* Browse state — no ?id= param, show all audited URLs */}
+          {pageState === "browse" && (
+            <div data-testid="results-browse">
+              {auditedUrls.length === 0 ? (
+                <div data-testid="results-browse-empty" className="text-center py-16">
+                  <h2 className="text-xl font-semibold mb-2 text-neutral-200">
+                    No audit results yet
+                  </h2>
+                  <p className="text-neutral-400 mb-4">
+                    Run an audit from the dashboard to see results here.
+                  </p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleBackToDashboard}
+                    data-testid="results-browse-to-dashboard"
+                  >
+                    Go to Dashboard
+                  </Button>
+                </div>
+              ) : (
+                <div data-testid="results-browse-list">
+                  <h2 className="text-lg font-semibold mb-4 text-neutral-200">
+                    Select an audit to view
+                  </h2>
+                  <div className="space-y-2">
+                    {auditedUrls.map((item) => (
+                      <button
+                        key={item.auditId}
+                        type="button"
+                        onClick={() => {
+                          router.push(`/results?id=${encodeURIComponent(item.auditId)}`);
+                        }}
+                        data-testid={`browse-audit-${item.auditId}`}
+                        className="flex w-full items-center justify-between gap-3 rounded-lg border border-neutral-800/50 bg-neutral-900/80 px-4 py-3 text-left transition-all hover:border-neutral-700/50 hover:bg-neutral-800/50"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-neutral-200 truncate">
+                            {item.url}
+                          </p>
+                          <p className="text-xs text-neutral-500">{item.projectName}</p>
+                        </div>
+                        <span className="shrink-0 text-xs text-neutral-500">View →</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
