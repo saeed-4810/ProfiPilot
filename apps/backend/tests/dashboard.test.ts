@@ -70,8 +70,8 @@ beforeEach(() => {
   });
 });
 
-describe("PERF-164: GET /dashboard/stats", () => {
-  it("returns 200 with aggregate stats for the authenticated user", async () => {
+describe("T-PERF-164-001: GET /dashboard/stats returns correct aggregates", () => {
+  it("P-PERF-164-001: returns 200 with aggregate stats for the authenticated user", async () => {
     const res = await request(app).get("/dashboard/stats").set("Cookie", "__session=valid-session");
 
     expect(res.status).toBe(200);
@@ -84,7 +84,7 @@ describe("PERF-164: GET /dashboard/stats", () => {
     expect(mockGetDashboardStats).toHaveBeenCalledWith("user-123");
   });
 
-  it("returns null avg score and zero attention when user has no projects", async () => {
+  it("T-PERF-164-002: returns null avg score and zero attention when user has no projects", async () => {
     mockGetDashboardStats.mockResolvedValue({
       activeProjects: 0,
       inProgressAudits: 0,
@@ -103,7 +103,7 @@ describe("PERF-164: GET /dashboard/stats", () => {
     });
   });
 
-  it("returns 401 when not authenticated", async () => {
+  it("T-PERF-164-005: returns 401 when not authenticated", async () => {
     const res = await request(app).get("/dashboard/stats");
 
     expect(res.status).toBe(401);

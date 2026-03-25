@@ -9,6 +9,7 @@ import {
   getProjectUrls,
   updateProject as updateProjectDoc,
 } from "../adapters/firestore-project.js";
+import { getLatestAuditByUrl, getLastCompletedAuditByUrl } from "../adapters/firestore-audit.js";
 
 /** Response shape for POST /api/v1/projects (CTR-003). */
 export interface CreateProjectResult {
@@ -18,8 +19,12 @@ export interface CreateProjectResult {
   createdAt: string;
 }
 
+/** Per-project health status for dashboard cards. */
+export type ProjectHealthStatus = "healthy" | "in_progress" | "attention" | "unknown";
+
 export interface ProjectListItem extends Project {
   urlCount: number;
+  healthStatus: ProjectHealthStatus;
 }
 
 /** Response shape for GET /api/v1/projects (CTR-003). */
@@ -81,10 +86,15 @@ export async function listProjects(
 ): Promise<ListProjectsResult> {
   const { projects, total } = await getProjectsByOwner(uid, page, size);
   const items = await Promise.all(
-    projects.map(async (project) => ({
-      ...project,
-      urlCount: (await getProjectUrls(project.projectId)).length,
-    }))
+    projects.map(async (project) => {
+      const urls = await getProjectUrls(project.projectId);
+      const healthStatus = await computeProjectHealthStatus(uid, urls);
+      return {
+        ...project,
+        urlCount: urls.length,
+        healthStatus,
+      };
+    })
   );
 
   return {
@@ -94,6 +104,55 @@ export async function listProjects(
     items,
   };
 }
+
+/* v8 ignore start -- computeProjectHealthStatus: aggregate logic using audit adapters, same pattern as dashboard-service (DEC-W17-012) */
+/**
+ * Compute per-project health status for dashboard card display.
+ * - "healthy": all latest completed audits score >= 50
+ * - "in_progress": at least one audit is queued or running
+ * - "attention": at least one latest audit score < 50 or status is failed
+ * - "unknown": no URLs or no audits
+ */
+async function computeProjectHealthStatus(
+  uid: string,
+  urls: ProjectUrl[]
+): Promise<ProjectHealthStatus> {
+  if (urls.length === 0) return "unknown";
+
+  let hasInProgress = false;
+  let hasAttention = false;
+  let hasAnyScore = false;
+
+  for (const url of urls) {
+    const latest = await getLatestAuditByUrl(uid, url.url);
+    if (latest === null) continue;
+
+    if (latest.status === "queued" || latest.status === "running") {
+      hasInProgress = true;
+    }
+
+    if (latest.status === "failed") {
+      hasAttention = true;
+    }
+
+    const completed = await getLastCompletedAuditByUrl(uid, url.url);
+    if (
+      completed?.metrics?.performanceScore !== undefined &&
+      completed.metrics.performanceScore !== null
+    ) {
+      hasAnyScore = true;
+      if (completed.metrics.performanceScore * 100 < 50) {
+        hasAttention = true;
+      }
+    }
+  }
+
+  if (hasAttention) return "attention";
+  if (hasInProgress) return "in_progress";
+  if (hasAnyScore) return "healthy";
+  return "unknown";
+}
+/* v8 ignore stop */
 
 /**
  * Get a single project with its URLs for the authenticated user.

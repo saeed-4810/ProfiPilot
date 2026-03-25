@@ -76,11 +76,21 @@ const mockFirestore = {
       };
     }
     // Fallback for other collections (audits, etc.)
+    // Supports .where().orderBy().limit().get() chain for audit adapter queries
     return {
       doc: vi.fn(() => ({
         set: vi.fn(),
         get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
         update: vi.fn(),
+      })),
+      where: vi.fn(() => ({
+        get: vi.fn().mockResolvedValue({ empty: true, docs: [], size: 0 }),
+        orderBy: vi.fn(() => ({
+          limit: vi.fn(() => ({
+            get: vi.fn().mockResolvedValue({ empty: true, docs: [] }),
+          })),
+          get: vi.fn().mockResolvedValue({ empty: true, docs: [] }),
+        })),
       })),
     };
   }),
@@ -170,7 +180,7 @@ describe("P-PERF-116-001: POST /api/v1/projects (create project)", () => {
     expect(mockSet).toHaveBeenCalledOnce();
   });
 
-  it("stores optional description when provided", async () => {
+  it("P-PERF-164-002: stores optional description when provided", async () => {
     const res = await request(app)
       .post("/api/v1/projects")
       .set("Cookie", "__session=valid-session")
@@ -217,6 +227,8 @@ describe("P-PERF-116-003: GET /api/v1/projects (list projects)", () => {
     expect(res.body.items).toHaveLength(1);
     expect(res.body.items[0].projectId).toBe("proj-abc");
     expect(res.body.items[0].urlCount).toBe(1);
+    // T-PERF-164-007: healthStatus derived from audit data (no audits → unknown)
+    expect(res.body.items[0].healthStatus).toBe("unknown");
   });
 
   it("supports custom page and size query params", async () => {
@@ -240,7 +252,7 @@ describe("P-PERF-116-003: GET /api/v1/projects (list projects)", () => {
   });
 });
 
-describe("PERF-164: PATCH /api/v1/projects/:id (update project)", () => {
+describe("T-PERF-164-006: PATCH /api/v1/projects/:id (update project)", () => {
   it("updates name and description for the owner", async () => {
     mockGet
       .mockResolvedValueOnce({
@@ -289,7 +301,7 @@ describe("PERF-164: PATCH /api/v1/projects/:id (update project)", () => {
     expect(res.body.code).toBe("VALIDATION_ERROR");
   });
 
-  it("returns 400 when description exceeds 200 characters", async () => {
+  it("T-PERF-164-004: returns 400 when description exceeds 200 characters", async () => {
     const res = await request(app)
       .patch("/api/v1/projects/proj-abc")
       .set("Cookie", "__session=valid-session")
