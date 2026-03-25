@@ -1,12 +1,13 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import type { Router as RouterType } from "express";
 import { AppError } from "../domain/errors.js";
-import { CreateProjectSchema, AddUrlSchema } from "../domain/project.js";
+import { CreateProjectSchema, AddUrlSchema, UpdateProjectSchema } from "../domain/project.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
   createProject,
   listProjects,
   getProject,
+  updateProject,
   addUrl,
   deleteProjectUrl,
 } from "../services/project-service.js";
@@ -57,7 +58,7 @@ projectRouter.post(
 
     try {
       const uid = (req as Request & { uid: string }).uid;
-      const result = await createProject(uid, parsed.data.name);
+      const result = await createProject(uid, parsed.data.name, parsed.data.description);
       res.status(201).json(result);
     } catch (err) {
       if (err instanceof AppError) {
@@ -65,6 +66,36 @@ projectRouter.post(
         return;
       }
       next(new AppError(500, "PROJECT_CREATE_FAILED", "Failed to create project."));
+    }
+  }
+);
+
+/**
+ * PATCH /api/v1/projects/:id
+ * CTR-003: Update mutable project fields. Requires authentication and ownership.
+ */
+projectRouter.patch(
+  "/:id",
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const parsed = UpdateProjectSchema.safeParse(req.body);
+    if (!parsed.success) {
+      next(new AppError(400, "VALIDATION_ERROR", "Invalid request body.", parsed.error.flatten()));
+      return;
+    }
+
+    try {
+      const uid = (req as Request & { uid: string }).uid;
+      const projectId = req.params["id"] as string;
+
+      const result = await updateProject(uid, projectId, parsed.data);
+      res.status(200).json(result);
+    } catch (err) {
+      if (err instanceof AppError) {
+        next(err);
+        return;
+      }
+      next(new AppError(500, "PROJECT_UPDATE_FAILED", "Failed to update project."));
     }
   }
 );

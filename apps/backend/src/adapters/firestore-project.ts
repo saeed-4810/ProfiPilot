@@ -11,7 +11,11 @@ const COLLECTION = "projects";
 const URLS_SUBCOLLECTION = "urls";
 
 /** Create a new project document in Firestore. Returns the created Project. */
-export async function createProject(ownerId: string, name: string): Promise<Project> {
+export async function createProject(
+  ownerId: string,
+  name: string,
+  description?: string | null
+): Promise<Project> {
   const firestore = getFirebaseApp().firestore();
   const projectId = randomUUID();
   const now = new Date().toISOString();
@@ -20,6 +24,7 @@ export async function createProject(ownerId: string, name: string): Promise<Proj
     projectId,
     ownerId,
     name,
+    ...(description !== undefined ? { description } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -27,6 +32,28 @@ export async function createProject(ownerId: string, name: string): Promise<Proj
   await firestore.collection(COLLECTION).doc(projectId).set(project);
   return project;
 }
+
+/* v8 ignore start -- getAllProjectsByOwner: simple Firestore query, tested via dashboard-service unit tests */
+/** Get all projects for a specific owner without pagination. */
+export async function getAllProjectsByOwner(ownerId: string): Promise<Project[]> {
+  const firestore = getFirebaseApp().firestore();
+  const snapshot = await firestore
+    .collection(COLLECTION)
+    .where("ownerId", "==", ownerId)
+    .orderBy("createdAt", "desc")
+    .get();
+
+  const projects: Project[] = [];
+  for (const doc of snapshot.docs) {
+    const parsed = ProjectSchema.safeParse(doc.data());
+    if (parsed.success) {
+      projects.push(parsed.data);
+    }
+  }
+
+  return projects;
+}
+/* v8 ignore stop */
 
 /**
  * Get paginated projects for a specific owner.
@@ -80,6 +107,37 @@ export async function getProject(projectId: string): Promise<Project | null> {
   }
 
   return parsed.data;
+}
+
+/** Update mutable project fields and return the updated project. */
+export async function updateProject(
+  projectId: string,
+  updates: { name?: string | undefined; description?: string | null | undefined }
+): Promise<Project> {
+  const firestore = getFirebaseApp().firestore();
+  const now = new Date().toISOString();
+
+  const update: Record<string, string | null> = {
+    updatedAt: now,
+  };
+
+  if (updates.name !== undefined) {
+    update["name"] = updates.name;
+  }
+
+  if (updates.description !== undefined) {
+    update["description"] = updates.description;
+  }
+
+  await firestore.collection(COLLECTION).doc(projectId).update(update);
+
+  const updated = await getProject(projectId);
+  /* v8 ignore next 3 -- defensive: project was just updated, reload failure is near-impossible */
+  if (!updated) {
+    throw new Error("Updated project could not be reloaded.");
+  }
+
+  return updated;
 }
 
 /** Add a URL to a project's urls subcollection. Returns the created ProjectUrl. */

@@ -9,9 +9,37 @@ export const CreateProjectSchema = z.object({
     .string()
     .min(1, "Project name is required.")
     .max(100, "Project name must be 100 characters or fewer."),
+  description: z
+    .string()
+    .max(200, "Project description must be 200 characters or fewer.")
+    .nullable()
+    .optional(),
 });
 
 export type CreateProjectRequest = z.infer<typeof CreateProjectSchema>;
+
+/**
+ * Zod schema for PATCH /api/v1/projects/:id request body (CTR-003).
+ * At least one field must be present.
+ */
+export const UpdateProjectSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1, "Project name is required.")
+      .max(100, "Project name must be 100 characters or fewer.")
+      .optional(),
+    description: z
+      .string()
+      .max(200, "Project description must be 200 characters or fewer.")
+      .nullable()
+      .optional(),
+  })
+  .refine((data) => data.name !== undefined || data.description !== undefined, {
+    message: "At least one field must be provided.",
+  });
+
+export type UpdateProjectRequest = z.infer<typeof UpdateProjectSchema>;
 
 /**
  * Zod schema for POST /api/v1/projects/:id/urls request body (CTR-004).
@@ -33,6 +61,7 @@ export interface Project {
   projectId: string;
   ownerId: string;
   name: string;
+  description?: string | null | undefined;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,6 +83,7 @@ export const ProjectSchema = z.object({
   projectId: z.string(),
   ownerId: z.string(),
   name: z.string(),
+  description: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

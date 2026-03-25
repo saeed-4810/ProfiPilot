@@ -7,13 +7,19 @@ import {
   addUrlToProject as addUrlDoc,
   deleteUrl as deleteUrlDoc,
   getProjectUrls,
+  updateProject as updateProjectDoc,
 } from "../adapters/firestore-project.js";
 
 /** Response shape for POST /api/v1/projects (CTR-003). */
 export interface CreateProjectResult {
   projectId: string;
   name: string;
+  description?: string | null;
   createdAt: string;
+}
+
+export interface ProjectListItem extends Project {
+  urlCount: number;
 }
 
 /** Response shape for GET /api/v1/projects (CTR-003). */
@@ -21,7 +27,7 @@ export interface ListProjectsResult {
   page: number;
   size: number;
   total: number;
-  items: Project[];
+  items: ProjectListItem[];
 }
 
 /** Response shape for GET /api/v1/projects/:id (CTR-003). */
@@ -38,16 +44,28 @@ export interface AddUrlResult {
   addedAt: string;
 }
 
+export interface UpdateProjectResult {
+  projectId: string;
+  name: string;
+  description?: string | null;
+  updatedAt: string;
+}
+
 /**
  * Create a new project for the authenticated user.
  * Delegates persistence to the Firestore adapter.
  */
-export async function createProject(uid: string, name: string): Promise<CreateProjectResult> {
-  const project = await createProjectDoc(uid, name);
+export async function createProject(
+  uid: string,
+  name: string,
+  description?: string | null
+): Promise<CreateProjectResult> {
+  const project = await createProjectDoc(uid, name, description);
 
   return {
     projectId: project.projectId,
     name: project.name,
+    ...(project.description !== undefined ? { description: project.description } : {}),
     createdAt: project.createdAt,
   };
 }
@@ -62,12 +80,18 @@ export async function listProjects(
   size: number
 ): Promise<ListProjectsResult> {
   const { projects, total } = await getProjectsByOwner(uid, page, size);
+  const items = await Promise.all(
+    projects.map(async (project) => ({
+      ...project,
+      urlCount: (await getProjectUrls(project.projectId)).length,
+    }))
+  );
 
   return {
     page,
     size,
     total,
-    items: projects,
+    items,
   };
 }
 
@@ -114,6 +138,32 @@ export async function addUrl(uid: string, projectId: string, url: string): Promi
     url: projectUrl.url,
     normalizedUrl: projectUrl.normalizedUrl,
     addedAt: projectUrl.addedAt,
+  };
+}
+
+/** Update mutable project fields for the authenticated owner. */
+export async function updateProject(
+  uid: string,
+  projectId: string,
+  updates: { name?: string | undefined; description?: string | null | undefined }
+): Promise<UpdateProjectResult> {
+  const project = await getProjectDoc(projectId);
+
+  if (!project) {
+    throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found.");
+  }
+
+  if (project.ownerId !== uid) {
+    throw new AppError(403, "PROJECT_FORBIDDEN", "You do not have access to this project.");
+  }
+
+  const updated = await updateProjectDoc(projectId, updates);
+
+  return {
+    projectId: updated.projectId,
+    name: updated.name,
+    ...(updated.description !== undefined ? { description: updated.description } : {}),
+    updatedAt: updated.updatedAt,
   };
 }
 

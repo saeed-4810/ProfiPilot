@@ -169,6 +169,19 @@ describe("P-PERF-116-001: POST /api/v1/projects (create project)", () => {
     expect(res.body.createdAt).toBeDefined();
     expect(mockSet).toHaveBeenCalledOnce();
   });
+
+  it("stores optional description when provided", async () => {
+    const res = await request(app)
+      .post("/api/v1/projects")
+      .set("Cookie", "__session=valid-session")
+      .send({ name: "My New Project", description: "Core marketing funnel" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.description).toBe("Core marketing funnel");
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({ description: "Core marketing funnel" })
+    );
+  });
 });
 
 // ============================================================================
@@ -203,6 +216,7 @@ describe("P-PERF-116-003: GET /api/v1/projects (list projects)", () => {
     expect(res.body.total).toBe(1);
     expect(res.body.items).toHaveLength(1);
     expect(res.body.items[0].projectId).toBe("proj-abc");
+    expect(res.body.items[0].urlCount).toBe(1);
   });
 
   it("supports custom page and size query params", async () => {
@@ -223,6 +237,148 @@ describe("P-PERF-116-003: GET /api/v1/projects (list projects)", () => {
     expect(res.status).toBe(200);
     expect(res.body.page).toBe(1);
     expect(res.body.size).toBe(100);
+  });
+});
+
+describe("PERF-164: PATCH /api/v1/projects/:id (update project)", () => {
+  it("updates name and description for the owner", async () => {
+    mockGet
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          projectId: "proj-abc",
+          ownerId: "user-123",
+          name: "My Project",
+          createdAt: "2026-03-18T00:00:00.000Z",
+          updatedAt: "2026-03-18T00:00:00.000Z",
+        }),
+      })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          projectId: "proj-abc",
+          ownerId: "user-123",
+          name: "Renamed Project",
+          description: "Improved summary",
+          createdAt: "2026-03-18T00:00:00.000Z",
+          updatedAt: "2026-03-20T00:00:00.000Z",
+        }),
+      });
+
+    const res = await request(app)
+      .patch("/api/v1/projects/proj-abc")
+      .set("Cookie", "__session=valid-session")
+      .send({ name: "Renamed Project", description: "Improved summary" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      projectId: "proj-abc",
+      name: "Renamed Project",
+      description: "Improved summary",
+    });
+    expect(mockUpdate).toHaveBeenCalledOnce();
+  });
+
+  it("returns 400 when no update fields are provided", async () => {
+    const res = await request(app)
+      .patch("/api/v1/projects/proj-abc")
+      .set("Cookie", "__session=valid-session")
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns 400 when description exceeds 200 characters", async () => {
+    const res = await request(app)
+      .patch("/api/v1/projects/proj-abc")
+      .set("Cookie", "__session=valid-session")
+      .send({ description: "x".repeat(201) });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns 404 when project does not exist", async () => {
+    mockGet.mockResolvedValueOnce({ exists: false, data: () => undefined });
+
+    const res = await request(app)
+      .patch("/api/v1/projects/missing")
+      .set("Cookie", "__session=valid-session")
+      .send({ name: "Renamed" });
+
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe("PROJECT_NOT_FOUND");
+  });
+
+  it("returns 403 when user does not own the project", async () => {
+    mockGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        projectId: "proj-other",
+        ownerId: "other-user-456",
+        name: "Other Project",
+        createdAt: "2026-03-18T00:00:00.000Z",
+        updatedAt: "2026-03-18T00:00:00.000Z",
+      }),
+    });
+
+    const res = await request(app)
+      .patch("/api/v1/projects/proj-other")
+      .set("Cookie", "__session=valid-session")
+      .send({ name: "Renamed" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("PROJECT_FORBIDDEN");
+  });
+
+  it("omits description from response when project has no description", async () => {
+    mockGet
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          projectId: "proj-abc",
+          ownerId: "user-123",
+          name: "My Project",
+          createdAt: "2026-03-18T00:00:00.000Z",
+          updatedAt: "2026-03-18T00:00:00.000Z",
+        }),
+      })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          projectId: "proj-abc",
+          ownerId: "user-123",
+          name: "Renamed Only",
+          createdAt: "2026-03-18T00:00:00.000Z",
+          updatedAt: "2026-03-20T00:00:00.000Z",
+        }),
+      });
+
+    const res = await request(app)
+      .patch("/api/v1/projects/proj-abc")
+      .set("Cookie", "__session=valid-session")
+      .send({ name: "Renamed Only" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe("Renamed Only");
+    expect(res.body).not.toHaveProperty("description");
+  });
+
+  it("returns 500 when Firestore update fails with non-AppError", async () => {
+    mockUpdate.mockRejectedValueOnce(new Error("Firestore write failed"));
+
+    const res = await request(app)
+      .patch("/api/v1/projects/proj-abc")
+      .set("Cookie", "__session=valid-session")
+      .send({ name: "Renamed" });
+
+    expect(res.status).toBe(500);
+    expect(res.body).toMatchObject({
+      status: 500,
+      code: "PROJECT_UPDATE_FAILED",
+      message: "Failed to update project.",
+    });
   });
 });
 
