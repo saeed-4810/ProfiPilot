@@ -121,4 +121,16 @@ test.describe("Dashboard flow — /dashboard", () => {
       { timeout: 10_000 }
     );
   });
+
+  // E-PERF-164-001: Dashboard loads with real stats from GET /dashboard/stats.
+  // Requires PERF-165 frontend implementation — stubbed as fixme until then.
+  test.fixme("E-PERF-164-001 — dashboard loads with stat cards showing real numbers", async ({
+    page,
+  }) => {
+    await page.goto("/dashboard");
+    await expect(page.getByTestId("dashboard-stat-active-projects")).toBeVisible();
+    await expect(page.getByTestId("dashboard-stat-in-progress")).toBeVisible();
+    await expect(page.getByTestId("dashboard-stat-avg-score")).toBeVisible();
+    await expect(page.getByTestId("dashboard-stat-attention")).toBeVisible();
+  });
 });

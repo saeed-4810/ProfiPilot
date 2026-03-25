@@ -130,6 +130,53 @@ export async function getLastCompletedAuditByUrl(
 }
 /* v8 ignore stop */
 
+/* v8 ignore start -- getLatestAuditByUrl + countInProgressAuditsByUser: Firestore queries, tested via dashboard-service unit tests */
+/**
+ * Find the most recent audit for a given URL and user regardless of status.
+ * Returns null if no audit exists.
+ */
+export async function getLatestAuditByUrl(uid: string, url: string): Promise<AuditJob | null> {
+  const firestore = getFirebaseApp().firestore();
+
+  const snapshot = await firestore
+    .collection(COLLECTION)
+    .where("uid", "==", uid)
+    .orderBy("createdAt", "desc")
+    .limit(20)
+    .get();
+
+  if (snapshot.empty) return null;
+
+  for (const doc of snapshot.docs) {
+    const data = doc.data();
+    if (data["url"] !== url) continue;
+
+    const parsed = AuditJobSchema.safeParse(data);
+    if (!parsed.success) continue;
+
+    return { ...parsed.data, strategy: parsed.data.strategy ?? "mobile" };
+  }
+
+  return null;
+}
+
+/** Count audits for a user where status is queued or running. */
+export async function countInProgressAuditsByUser(uid: string): Promise<number> {
+  const firestore = getFirebaseApp().firestore();
+  const snapshot = await firestore.collection(COLLECTION).where("uid", "==", uid).get();
+
+  let count = 0;
+  for (const doc of snapshot.docs) {
+    const data = doc.data();
+    if (data["status"] === AuditStatus.QUEUED || data["status"] === AuditStatus.RUNNING) {
+      count += 1;
+    }
+  }
+
+  return count;
+}
+/* v8 ignore stop */
+
 /**
  * Get paginated audit jobs for a user, ordered by createdAt descending.
  * Uses the composite index: audits(uid ASC, createdAt DESC).
