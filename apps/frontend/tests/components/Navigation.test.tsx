@@ -188,6 +188,21 @@ describe("Top nav bar links", () => {
 });
 
 /* ================================================================== */
+/* PERF-165 AC8: "New Audit" button in top nav                        */
+/* ================================================================== */
+
+describe("PERF-165 AC8: New Audit button in top nav", () => {
+  it("renders New Audit button linking to /audit", () => {
+    render(<Navigation />);
+
+    const btn = screen.getByTestId("nav-new-audit");
+    expect(btn).toBeInTheDocument();
+    expect(btn).toHaveAttribute("href", "/audit");
+    expect(btn).toHaveTextContent("New Audit");
+  });
+});
+
+/* ================================================================== */
 /* Sidebar footer: Support + Docs (UX-001 Step 7)                     */
 /* ================================================================== */
 
