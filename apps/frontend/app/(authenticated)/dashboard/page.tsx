@@ -106,6 +106,8 @@ function getHealthStatusLabel(status: string): { label: string; color: string; d
   switch (status) {
     case "healthy":
       return { label: "Running smoothly", color: "text-[#4ae176]/80", dotColor: "bg-[#4ae176]" };
+    case "warning":
+      return { label: "Needs improvement", color: "text-[#ffb95f]/80", dotColor: "bg-[#ffb95f]" };
     case "in_progress":
       return {
         label: "Gathering insights...",
@@ -113,7 +115,7 @@ function getHealthStatusLabel(status: string): { label: string; color: string; d
         dotColor: "bg-[#adc6ff] animate-pulse",
       };
     case "attention":
-      return { label: "Review recommended", color: "text-[#ffb95f]/80", dotColor: "bg-[#ffb95f]" };
+      return { label: "Review recommended", color: "text-[#ff6b6b]/80", dotColor: "bg-[#ff6b6b]" };
     default:
       return { label: "No data yet", color: "text-gray-500", dotColor: "bg-gray-500" };
   }

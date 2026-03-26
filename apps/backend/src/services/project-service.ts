@@ -19,8 +19,11 @@ export interface CreateProjectResult {
   createdAt: string;
 }
 
-/** Per-project health status for dashboard cards. */
-export type ProjectHealthStatus = "healthy" | "in_progress" | "attention" | "unknown";
+/**
+ * Per-project health status for dashboard cards.
+ * 5 tiers per ADR-029 §3a — aligned with Lighthouse scoring thresholds.
+ */
+export type ProjectHealthStatus = "healthy" | "warning" | "in_progress" | "attention" | "unknown";
 
 export interface ProjectListItem extends Project {
   urlCount: number;
@@ -108,10 +111,8 @@ export async function listProjects(
 /* v8 ignore start -- computeProjectHealthStatus: aggregate logic using audit adapters, same pattern as dashboard-service (DEC-W17-012) */
 /**
  * Compute per-project health status for dashboard card display.
- * - "healthy": all latest completed audits score >= 50
- * - "in_progress": at least one audit is queued or running
- * - "attention": at least one latest audit score < 50 or status is failed
- * - "unknown": no URLs or no audits
+ * 5 tiers per ADR-029 §3a, aligned with Lighthouse scoring thresholds.
+ * Priority: attention > warning > in_progress > healthy > unknown.
  */
 async function computeProjectHealthStatus(
   uid: string,
@@ -121,6 +122,7 @@ async function computeProjectHealthStatus(
 
   let hasInProgress = false;
   let hasAttention = false;
+  let hasWarning = false;
   let hasAnyScore = false;
 
   for (const url of urls) {
@@ -141,13 +143,17 @@ async function computeProjectHealthStatus(
       completed.metrics.performanceScore !== null
     ) {
       hasAnyScore = true;
-      if (completed.metrics.performanceScore * 100 < 50) {
+      const displayScore = completed.metrics.performanceScore * 100;
+      if (displayScore < 50) {
         hasAttention = true;
+      } else if (displayScore < 90) {
+        hasWarning = true;
       }
     }
   }
 
   if (hasAttention) return "attention";
+  if (hasWarning) return "warning";
   if (hasInProgress) return "in_progress";
   if (hasAnyScore) return "healthy";
   return "unknown";

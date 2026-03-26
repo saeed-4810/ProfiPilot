@@ -739,6 +739,18 @@ describe("PERF-165: Project cards show Stitch status labels", () => {
     });
   });
 
+  it("renders 'Needs improvement' for warning projects (score 50-89)", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", healthStatus: "warning" })])
+    );
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Needs improvement")).toBeInTheDocument();
+    });
+  });
+
   it("renders 'Gathering insights...' for in_progress projects", async () => {
     mockListProjects.mockResolvedValue(
       makeProjectList([makeProject({ projectId: "proj-1", healthStatus: "in_progress" })])
