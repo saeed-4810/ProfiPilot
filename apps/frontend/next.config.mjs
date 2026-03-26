@@ -11,7 +11,7 @@ const nextConfig = {
    * In production/staging, Firebase Hosting handles this via rewrites
    * (see firebase.json). This config only applies to `next dev`.
    *
-   * Routes proxied: /auth/*, /audits/*, /api/v1/*, /health
+   * Routes proxied: /auth/*, /audits/*, /api/v1/*, /dashboard/*, /health
    * Target: BACKEND_URL env var or http://localhost:3001
    */
   async rewrites() {
@@ -20,6 +20,7 @@ const nextConfig = {
       { source: "/auth/:path*", destination: `${backendUrl}/auth/:path*` },
       { source: "/audits/:path*", destination: `${backendUrl}/audits/:path*` },
       { source: "/api/v1/:path*", destination: `${backendUrl}/api/v1/:path*` },
+      { source: "/dashboard/:path*", destination: `${backendUrl}/dashboard/:path*` },
       { source: "/health", destination: `${backendUrl}/health` },
     ];
   },
