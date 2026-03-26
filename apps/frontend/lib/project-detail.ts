@@ -35,14 +35,13 @@ export interface ProjectHealthResponse {
   readonly computedAt: string;
 }
 
-/** Single audit item in the audit history response. */
+/** Single audit item in the audit history response (matches backend project-health-service). */
 export interface AuditItem {
-  readonly auditId: string;
+  readonly jobId: string;
   readonly url: string;
   readonly performanceScore: number | null;
   readonly status: string;
   readonly createdAt: string;
-  readonly completedAt: string | null;
 }
 
 /** Response from GET /api/v1/projects/:id/audits. */

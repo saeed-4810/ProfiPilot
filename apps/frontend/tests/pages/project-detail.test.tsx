@@ -119,20 +119,18 @@ const MOCK_AUDITS = {
   total: 2,
   items: [
     {
-      auditId: "audit-2049",
+      jobId: "audit-2049",
       url: "https://acme.com",
       performanceScore: 85,
       status: "completed",
       createdAt: "2026-03-25T14:00:00Z",
-      completedAt: "2026-03-25T14:01:00Z",
     },
     {
-      auditId: "audit-2031",
+      jobId: "audit-2031",
       url: "https://acme.com/shop",
       performanceScore: 45,
       status: "completed",
       createdAt: "2026-03-24T08:00:00Z",
-      completedAt: "2026-03-24T08:02:00Z",
     },
   ],
 };
@@ -303,36 +301,32 @@ describe("T-PERF-167-003: Audit log renders timeline items", () => {
       total: 4,
       items: [
         {
-          auditId: "a1",
+          jobId: "a1",
           url: "https://a.com",
           performanceScore: 95,
           status: "completed",
           createdAt: "2026-03-25T14:00:00Z",
-          completedAt: "2026-03-25T14:01:00Z",
         },
         {
-          auditId: "a2",
+          jobId: "a2",
           url: "https://b.com",
           performanceScore: 72,
           status: "completed",
           createdAt: "2026-03-24T14:00:00Z",
-          completedAt: "2026-03-24T14:01:00Z",
         },
         {
-          auditId: "a3",
+          jobId: "a3",
           url: "https://c.com",
           performanceScore: 30,
           status: "completed",
           createdAt: "2026-03-23T14:00:00Z",
-          completedAt: "2026-03-23T14:01:00Z",
         },
         {
-          auditId: "a4",
+          jobId: "a4",
           url: "https://d.com",
           performanceScore: null,
           status: "failed",
           createdAt: "2026-03-22T14:00:00Z",
-          completedAt: null,
         },
       ],
     });
@@ -406,7 +400,7 @@ describe("T-PERF-167-004: Endpoint registry renders table rows", () => {
 /* ------------------------------------------------------------------ */
 
 describe("P-PERF-167-004: Audit history provides quick access to reports", () => {
-  it("View Report navigates to /results?id={auditId}", async () => {
+  it("View Report navigates to /results?id={jobId}", async () => {
     const user = userEvent.setup();
     render(<ProjectOverviewPage />);
     await waitFor(() => {
