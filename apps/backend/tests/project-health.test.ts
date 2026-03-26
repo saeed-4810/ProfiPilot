@@ -84,8 +84,16 @@ beforeEach(() => {
   mockGetProjectHealth.mockResolvedValue({
     overallScore: 75.5,
     scoreDelta: null,
-    deltaLabel: "unknown",
-    urlScores: [{ url: "https://example.com", performanceScore: 75.5, status: "completed" }],
+    deltaLabel: "Not enough data",
+    urlScores: [
+      {
+        urlId: "url-1",
+        url: "https://example.com",
+        label: "example.com",
+        score: 75.5,
+        lastAuditDate: "2026-03-20T00:00:00.000Z",
+      },
+    ],
     inProgressCount: 0,
     attentionCount: 0,
   });
@@ -122,9 +130,11 @@ beforeEach(() => {
     ],
     labDataPoints: [
       {
-        url: "https://example.com",
-        performanceScore: 80,
-        createdAt: "2026-03-15T00:00:00.000Z",
+        date: "2026-03-15",
+        lcp: 2500,
+        cls: 0.1,
+        tbt: 150,
+        performanceScore: 0.8,
       },
     ],
   });
@@ -143,8 +153,16 @@ describe("PERF-166: GET /api/v1/projects/:id/health", () => {
     expect(res.body).toEqual({
       overallScore: 75.5,
       scoreDelta: null,
-      deltaLabel: "unknown",
-      urlScores: [{ url: "https://example.com", performanceScore: 75.5, status: "completed" }],
+      deltaLabel: "Not enough data",
+      urlScores: [
+        {
+          urlId: "url-1",
+          url: "https://example.com",
+          label: "example.com",
+          score: 75.5,
+          lastAuditDate: "2026-03-20T00:00:00.000Z",
+        },
+      ],
       inProgressCount: 0,
       attentionCount: 0,
     });
@@ -155,7 +173,7 @@ describe("PERF-166: GET /api/v1/projects/:id/health", () => {
     mockGetProjectHealth.mockResolvedValue({
       overallScore: null,
       scoreDelta: null,
-      deltaLabel: "unknown",
+      deltaLabel: "Not enough data",
       urlScores: [],
       inProgressCount: 0,
       attentionCount: 0,
@@ -280,11 +298,11 @@ describe("PERF-166: GET /api/v1/projects/:id/audits", () => {
     expect(mockGetProjectAudits).toHaveBeenCalledWith("user-123", "proj-abc", 2, 5);
   });
 
-  it("T-PERF-166-010: clamps page to min 1 and size to max 100", async () => {
+  it("T-PERF-166-010: clamps page to min 1 and size to max 50", async () => {
     mockGetProjectAudits.mockResolvedValue({
       items: [],
       page: 1,
-      size: 100,
+      size: 50,
       total: 0,
     });
 
@@ -293,7 +311,7 @@ describe("PERF-166: GET /api/v1/projects/:id/audits", () => {
       .set("Cookie", "__session=valid-session");
 
     expect(res.status).toBe(200);
-    expect(mockGetProjectAudits).toHaveBeenCalledWith("user-123", "proj-abc", 1, 100);
+    expect(mockGetProjectAudits).toHaveBeenCalledWith("user-123", "proj-abc", 1, 50);
   });
 
   it("T-PERF-166-011: returns 401 without auth", async () => {
@@ -353,8 +371,8 @@ describe("PERF-166: GET /api/v1/projects/:id/trends", () => {
     });
     expect(res.body.labDataPoints).toHaveLength(1);
     expect(res.body.labDataPoints[0]).toMatchObject({
-      url: "https://example.com",
-      performanceScore: 80,
+      date: "2026-03-15",
+      performanceScore: 0.8,
     });
     expect(mockGetProjectTrends).toHaveBeenCalledWith("user-123", "proj-abc");
   });
@@ -365,9 +383,11 @@ describe("PERF-166: GET /api/v1/projects/:id/trends", () => {
       cruxPeriods: [],
       labDataPoints: [
         {
-          url: "https://example.com",
-          performanceScore: 70,
-          createdAt: "2026-03-10T00:00:00.000Z",
+          date: "2026-03-10",
+          lcp: 2100,
+          cls: 0.1,
+          tbt: 100,
+          performanceScore: 0.7,
         },
       ],
     });

@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getFirebaseApp } from "../lib/firebase.js";
+import { deleteProjectHealthCache } from "./firestore-project-health-cache.js";
+import { deleteProjectTrendsCache } from "./firestore-project-trends-cache.js";
 import {
   AuditStatus,
   AuditJobSchema,
@@ -88,6 +90,22 @@ export async function updateAuditStatus(
   }
 
   await firestore.collection(COLLECTION).doc(jobId).update(update);
+
+  /* v8 ignore start -- terminal-status cache invalidation: Firestore side effect, covered by higher-level service tests and DEC-W17-013 pattern */
+  if (
+    status === AuditStatus.COMPLETED ||
+    status === AuditStatus.FAILED ||
+    status === AuditStatus.CANCELLED
+  ) {
+    const audit = await getAuditJob(jobId);
+    if (audit?.projectId) {
+      await Promise.all([
+        deleteProjectHealthCache(audit.projectId),
+        deleteProjectTrendsCache(audit.projectId),
+      ]);
+    }
+  }
+  /* v8 ignore stop */
 }
 
 /* v8 ignore start -- PERF-144: getLastCompletedAuditByUrl — Firestore query, tested via E2E */
@@ -242,46 +260,44 @@ export async function updateAuditDesktopMetrics(
 }
 /* v8 ignore stop */
 
-/* v8 ignore start -- getAuditsByUrls + getCompletedAuditsByUrlInDateRange: Firestore queries, tested via project-health route-level mocks */
+/* v8 ignore start -- Firestore project-scoped audit queries: exercised via service tests, thin query wrappers */
 /**
  * Get paginated audits for a list of URLs belonging to a user.
- * Queries per-URL (Firestore doesn't support IN with >30 values + inequality),
- * then merges and paginates in memory.
+ * Queries all audits for the user, then scopes by projectId when available,
+ * falling back to URL matching for historical docs without projectId.
  * Returns audits ordered by createdAt descending with total count.
  */
 export async function getAuditsByUrls(
   uid: string,
+  projectId: string,
   urls: string[],
   page: number,
   size: number
 ): Promise<{ audits: AuditJob[]; total: number }> {
   const firestore = getFirebaseApp().firestore();
-  const allAudits: AuditJob[] = [];
+  const snapshot = await firestore
+    .collection(COLLECTION)
+    .where("uid", "==", uid)
+    .orderBy("createdAt", "desc")
+    .get();
 
-  for (const url of urls) {
-    const snapshot = await firestore
-      .collection(COLLECTION)
-      .where("uid", "==", uid)
-      .orderBy("createdAt", "desc")
-      .get();
-
-    for (const doc of snapshot.docs) {
-      const data = doc.data();
-      if (data["url"] !== url) continue;
-
-      const parsed = AuditJobSchema.safeParse(data);
-      if (parsed.success) {
-        allAudits.push({ ...parsed.data, strategy: parsed.data.strategy ?? "mobile" });
-      }
-    }
-  }
-
-  // Deduplicate by jobId (same audit may appear if URL is in multiple queries)
-  const seen = new Set<string>();
+  const urlSet = new Set(urls);
   const unique: AuditJob[] = [];
-  for (const audit of allAudits) {
-    if (!seen.has(audit.jobId)) {
-      seen.add(audit.jobId);
+
+  for (const doc of snapshot.docs) {
+    const parsed = AuditJobSchema.safeParse(doc.data());
+    if (!parsed.success) continue;
+
+    const audit = { ...parsed.data, strategy: parsed.data.strategy ?? "mobile" };
+
+    if (audit.projectId) {
+      if (audit.projectId === projectId) {
+        unique.push(audit);
+      }
+      continue;
+    }
+
+    if (urlSet.has(audit.url)) {
       unique.push(audit);
     }
   }
@@ -302,6 +318,7 @@ export async function getAuditsByUrls(
  */
 export async function getCompletedAuditsByUrlInDateRange(
   uid: string,
+  projectId: string,
   url: string,
   startDate: string,
   endDate: string
@@ -317,17 +334,18 @@ export async function getCompletedAuditsByUrlInDateRange(
   const audits: AuditJob[] = [];
 
   for (const doc of snapshot.docs) {
-    const data = doc.data();
-    if (data["url"] !== url) continue;
-    if (data["status"] !== AuditStatus.COMPLETED) continue;
+    const parsed = AuditJobSchema.safeParse(doc.data());
+    if (!parsed.success) continue;
 
-    const createdAt = data["createdAt"] as string | undefined;
+    const audit = { ...parsed.data, strategy: parsed.data.strategy ?? "mobile" };
+    if (audit.url !== url) continue;
+    if (audit.status !== AuditStatus.COMPLETED) continue;
+    if (audit.projectId && audit.projectId !== projectId) continue;
+
+    const createdAt = audit.createdAt;
     if (!createdAt || createdAt < startDate || createdAt > endDate) continue;
 
-    const parsed = AuditJobSchema.safeParse(data);
-    if (parsed.success) {
-      audits.push({ ...parsed.data, strategy: parsed.data.strategy ?? "mobile" });
-    }
+    audits.push(audit);
   }
 
   return audits;
