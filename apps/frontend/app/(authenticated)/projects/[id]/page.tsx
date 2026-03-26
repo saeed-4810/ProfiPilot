@@ -265,7 +265,7 @@ function AuditLogContent({ audits }: { readonly audits: ProjectAuditsResponse })
         const isLast = index === audits.items.length - 1;
 
         return (
-          <div key={audit.auditId} className="group relative flex gap-3 pb-4">
+          <div key={audit.jobId} className="group relative flex gap-3 pb-4">
             {/* Timeline dot + line */}
             <div className="flex flex-col items-center">
               <div
@@ -286,14 +286,14 @@ function AuditLogContent({ audits }: { readonly audits: ProjectAuditsResponse })
             <div className="flex-1 -mt-0.5">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-neutral-200">
-                  Audit-{audit.auditId.slice(0, 4)}
+                  Audit-{audit.jobId.slice(0, 4)}
                 </span>
                 {audit.performanceScore !== null && (
                   <Badge label={String(Math.round(audit.performanceScore))} variant={variant} />
                 )}
               </div>
               <p className="text-xs text-neutral-500 mt-0.5">
-                {new Date(audit.completedAt ?? audit.createdAt).toLocaleDateString("en-US", {
+                {new Date(audit.createdAt).toLocaleDateString("en-US", {
                   month: "short",
                   day: "numeric",
                   year: "numeric",
@@ -306,7 +306,7 @@ function AuditLogContent({ audits }: { readonly audits: ProjectAuditsResponse })
                 data-testid="audit-view-report"
                 className="mt-1 text-xs text-[#adc6ff] opacity-0 group-hover:opacity-100 transition-opacity motion-reduce:opacity-100 motion-reduce:transition-none cursor-pointer bg-transparent border-none p-0"
                 onClick={() => {
-                  router.push(`/results?id=${audit.auditId}`);
+                  router.push(`/results?id=${audit.jobId}`);
                 }}
               >
                 {/* copy: project-overview-view-report */}

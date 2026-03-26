@@ -209,20 +209,18 @@ describe("T-PERF-167-003: getProjectAudits", () => {
         total: 2,
         items: [
           {
-            auditId: "a1",
+            jobId: "a1",
             url: "https://example.com",
             performanceScore: 85,
             status: "completed",
             createdAt: "2026-03-25T10:00:00Z",
-            completedAt: "2026-03-25T10:01:00Z",
           },
           {
-            auditId: "a2",
+            jobId: "a2",
             url: "https://example.com/about",
             performanceScore: 45,
             status: "completed",
             createdAt: "2026-03-24T10:00:00Z",
-            completedAt: "2026-03-24T10:01:00Z",
           },
         ],
       }),

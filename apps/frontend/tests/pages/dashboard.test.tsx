@@ -856,6 +856,7 @@ describe("PERF-168: Review details link navigates to project overview", () => {
   });
 
   it("AC4: clicking link does not toggle card expand/collapse", async () => {
+    const user = userEvent.setup();
     mockListProjects.mockResolvedValue(
       makeProjectList([makeProject({ projectId: "proj-1", name: "My Project" })])
     );
@@ -866,9 +867,13 @@ describe("PERF-168: Review details link navigates to project overview", () => {
       expect(screen.getByTestId("review-details-proj-1")).toBeInTheDocument();
     });
 
-    // The card should not expand when clicking the link
-    // (stopPropagation prevents the card's onClick from firing)
     const card = screen.getByTestId("project-card-proj-1");
+    expect(card).toHaveAttribute("aria-expanded", "false");
+
+    // Click the link — stopPropagation prevents the card's onClick from firing
+    await user.click(screen.getByTestId("review-details-proj-1"));
+
+    // Card should still NOT be expanded (stopPropagation worked)
     expect(card).toHaveAttribute("aria-expanded", "false");
   });
 });

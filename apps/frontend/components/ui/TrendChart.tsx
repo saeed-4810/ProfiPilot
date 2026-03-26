@@ -133,6 +133,7 @@ function LegendItem({
   readonly label: string;
   readonly isDot?: boolean;
 }) {
+  /* v8 ignore next -- fallback unreachable: LegendItem only receives COLORS constants which are all mapped */
   const bgClass = COLOR_TO_BG[color] ?? "bg-neutral-500";
 
   return (
