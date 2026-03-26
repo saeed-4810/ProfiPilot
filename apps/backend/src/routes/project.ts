@@ -11,6 +11,11 @@ import {
   addUrl,
   deleteProjectUrl,
 } from "../services/project-service.js";
+import {
+  getProjectHealth,
+  getProjectAudits,
+  getProjectTrends,
+} from "../services/project-health-service.js";
 
 export const projectRouter: RouterType = Router();
 
@@ -96,6 +101,82 @@ projectRouter.patch(
         return;
       }
       next(new AppError(500, "PROJECT_UPDATE_FAILED", "Failed to update project."));
+    }
+  }
+);
+
+/**
+ * GET /api/v1/projects/:id/health
+ * PERF-166: Project health summary with overall score, delta, and per-URL scores.
+ * Must be registered BEFORE /:id to avoid Express param matching.
+ */
+projectRouter.get(
+  "/:id/health",
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const uid = (req as Request & { uid: string }).uid;
+      const projectId = req.params["id"] as string;
+
+      const result = await getProjectHealth(uid, projectId);
+      res.status(200).json(result);
+    } catch (err) {
+      if (err instanceof AppError) {
+        next(err);
+        return;
+      }
+      next(new AppError(500, "PROJECT_HEALTH_FAILED", "Failed to retrieve project health."));
+    }
+  }
+);
+
+/**
+ * GET /api/v1/projects/:id/audits
+ * PERF-166: Paginated audit history for all URLs in a project.
+ * Query params: ?page=1&size=10 (defaults: page=1, size=10)
+ */
+projectRouter.get(
+  "/:id/audits",
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const uid = (req as Request & { uid: string }).uid;
+      const projectId = req.params["id"] as string;
+      const page = Math.max(1, parseInt(req.query["page"] as string, 10) || 1);
+      const size = Math.min(100, Math.max(1, parseInt(req.query["size"] as string, 10) || 10));
+
+      const result = await getProjectAudits(uid, projectId, page, size);
+      res.status(200).json(result);
+    } catch (err) {
+      if (err instanceof AppError) {
+        next(err);
+        return;
+      }
+      next(new AppError(500, "PROJECT_AUDITS_FAILED", "Failed to retrieve project audits."));
+    }
+  }
+);
+
+/**
+ * GET /api/v1/projects/:id/trends
+ * PERF-166: CrUX field data trends and lab audit history for a project.
+ */
+projectRouter.get(
+  "/:id/trends",
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const uid = (req as Request & { uid: string }).uid;
+      const projectId = req.params["id"] as string;
+
+      const result = await getProjectTrends(uid, projectId);
+      res.status(200).json(result);
+    } catch (err) {
+      if (err instanceof AppError) {
+        next(err);
+        return;
+      }
+      next(new AppError(500, "PROJECT_TRENDS_FAILED", "Failed to retrieve project trends."));
     }
   }
 );

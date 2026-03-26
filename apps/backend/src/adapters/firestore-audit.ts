@@ -241,3 +241,95 @@ export async function updateAuditDesktopMetrics(
   });
 }
 /* v8 ignore stop */
+
+/* v8 ignore start -- getAuditsByUrls + getCompletedAuditsByUrlInDateRange: Firestore queries, tested via project-health route-level mocks */
+/**
+ * Get paginated audits for a list of URLs belonging to a user.
+ * Queries per-URL (Firestore doesn't support IN with >30 values + inequality),
+ * then merges and paginates in memory.
+ * Returns audits ordered by createdAt descending with total count.
+ */
+export async function getAuditsByUrls(
+  uid: string,
+  urls: string[],
+  page: number,
+  size: number
+): Promise<{ audits: AuditJob[]; total: number }> {
+  const firestore = getFirebaseApp().firestore();
+  const allAudits: AuditJob[] = [];
+
+  for (const url of urls) {
+    const snapshot = await firestore
+      .collection(COLLECTION)
+      .where("uid", "==", uid)
+      .orderBy("createdAt", "desc")
+      .get();
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      if (data["url"] !== url) continue;
+
+      const parsed = AuditJobSchema.safeParse(data);
+      if (parsed.success) {
+        allAudits.push({ ...parsed.data, strategy: parsed.data.strategy ?? "mobile" });
+      }
+    }
+  }
+
+  // Deduplicate by jobId (same audit may appear if URL is in multiple queries)
+  const seen = new Set<string>();
+  const unique: AuditJob[] = [];
+  for (const audit of allAudits) {
+    if (!seen.has(audit.jobId)) {
+      seen.add(audit.jobId);
+      unique.push(audit);
+    }
+  }
+
+  // Sort by createdAt descending
+  unique.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const total = unique.length;
+  const offset = (page - 1) * size;
+  const audits = unique.slice(offset, offset + size);
+
+  return { audits, total };
+}
+
+/**
+ * Get completed audits for a URL in a date range (for lab data points).
+ * Filters by uid, url, status=completed, and createdAt within range.
+ */
+export async function getCompletedAuditsByUrlInDateRange(
+  uid: string,
+  url: string,
+  startDate: string,
+  endDate: string
+): Promise<AuditJob[]> {
+  const firestore = getFirebaseApp().firestore();
+
+  const snapshot = await firestore
+    .collection(COLLECTION)
+    .where("uid", "==", uid)
+    .orderBy("createdAt", "desc")
+    .get();
+
+  const audits: AuditJob[] = [];
+
+  for (const doc of snapshot.docs) {
+    const data = doc.data();
+    if (data["url"] !== url) continue;
+    if (data["status"] !== AuditStatus.COMPLETED) continue;
+
+    const createdAt = data["createdAt"] as string | undefined;
+    if (!createdAt || createdAt < startDate || createdAt > endDate) continue;
+
+    const parsed = AuditJobSchema.safeParse(data);
+    if (parsed.success) {
+      audits.push({ ...parsed.data, strategy: parsed.data.strategy ?? "mobile" });
+    }
+  }
+
+  return audits;
+}
+/* v8 ignore stop */
