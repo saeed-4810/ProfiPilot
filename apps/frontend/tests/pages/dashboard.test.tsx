@@ -808,6 +808,72 @@ describe("PERF-165: Project cards show Stitch status labels", () => {
 });
 
 /* ================================================================== */
+/* PERF-168: Wire "Review details" to project overview page            */
+/* ================================================================== */
+
+describe("PERF-168: Review details link navigates to project overview", () => {
+  it("AC1: link href points to /projects/{projectId}", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "My Project" })])
+    );
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      const link = screen.getByTestId("review-details-proj-1");
+      expect(link).toHaveAttribute("href", "/projects/proj-1");
+    });
+  });
+
+  it("AC2: link opens in new tab with noopener noreferrer", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "My Project" })])
+    );
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      const link = screen.getByTestId("review-details-proj-1");
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    });
+  });
+
+  it("AC3: link has accessible aria-label with project name and new tab hint", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "My Project" })])
+    );
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      const link = screen.getByTestId("review-details-proj-1");
+      expect(link).toHaveAttribute(
+        "aria-label",
+        "Review details for My Project (opens in new tab)"
+      );
+    });
+  });
+
+  it("AC4: clicking link does not toggle card expand/collapse", async () => {
+    mockListProjects.mockResolvedValue(
+      makeProjectList([makeProject({ projectId: "proj-1", name: "My Project" })])
+    );
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("review-details-proj-1")).toBeInTheDocument();
+    });
+
+    // The card should not expand when clicking the link
+    // (stopPropagation prevents the card's onClick from firing)
+    const card = screen.getByTestId("project-card-proj-1");
+    expect(card).toHaveAttribute("aria-expanded", "false");
+  });
+});
+
+/* ================================================================== */
 /* E-DASH-001: Dashboard page renders (covered by unit tests)          */
 /* ================================================================== */
 
