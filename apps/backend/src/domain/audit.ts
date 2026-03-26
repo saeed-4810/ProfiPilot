@@ -61,6 +61,7 @@ export type AuditMetrics = z.infer<typeof AuditMetricsSchema>;
 export interface AuditJob {
   jobId: string;
   uid: string;
+  projectId?: string | undefined;
   url: string;
   status: AuditStatus;
   strategy: AuditStrategy;
@@ -83,6 +84,7 @@ export interface AuditJob {
 export const AuditJobSchema = z.object({
   jobId: z.string(),
   uid: z.string(),
+  projectId: z.string().optional(),
   url: z.string(),
   status: z.enum(["queued", "running", "completed", "failed", "cancelled", "retrying"]),
   strategy: z.enum(["mobile", "desktop", "both"]).optional(),

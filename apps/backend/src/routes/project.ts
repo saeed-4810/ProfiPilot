@@ -143,7 +143,7 @@ projectRouter.get(
       const uid = (req as Request & { uid: string }).uid;
       const projectId = req.params["id"] as string;
       const page = Math.max(1, parseInt(req.query["page"] as string, 10) || 1);
-      const size = Math.min(100, Math.max(1, parseInt(req.query["size"] as string, 10) || 10));
+      const size = Math.min(50, Math.max(1, parseInt(req.query["size"] as string, 10) || 10));
 
       const result = await getProjectAudits(uid, projectId, page, size);
       res.status(200).json(result);
