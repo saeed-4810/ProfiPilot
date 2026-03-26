@@ -19,6 +19,7 @@
 
 import { useState, useEffect, useCallback, useRef, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import { MotionWrapper } from "@/components/MotionWrapper";
@@ -802,9 +803,16 @@ export default function DashboardPage() {
                             <span className="text-xs font-light text-gray-600">
                               Updated {formatRelativeTime(project.updatedAt)}
                             </span>
-                            <span
-                              className="text-sm font-medium text-[#adc6ff] flex items-center gap-2"
+                            <Link
+                              href={`/projects/${project.projectId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={`Review details for ${project.name} (opens in new tab)`}
+                              className="text-sm font-medium text-[#adc6ff] flex items-center gap-2 hover:text-[#d8e2ff] transition-colors motion-reduce:transition-none"
                               data-testid={`review-details-${project.projectId}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                              }}
                             >
                               Review details
                               <span
@@ -813,7 +821,7 @@ export default function DashboardPage() {
                               >
                                 chevron_right
                               </span>
-                            </span>
+                            </Link>
                           </div>
                         </div>
 
