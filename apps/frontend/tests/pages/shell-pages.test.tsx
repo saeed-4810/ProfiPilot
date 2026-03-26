@@ -22,6 +22,16 @@ vi.mock("@/lib/auth", () => ({
   getAuthErrorMessage: () => "An unexpected error occurred.",
 }));
 
+// Mock dashboard lib for DashboardPage
+vi.mock("@/lib/dashboard", () => ({
+  getDashboardStats: vi.fn().mockResolvedValue({
+    activeProjects: 0,
+    inProgressAudits: 0,
+    avgPerformanceScore: null,
+    attentionCount: 0,
+  }),
+}));
+
 // Mock audit lib for AuditPage
 vi.mock("@/lib/audit", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -80,7 +90,7 @@ describe("T-P105-003 — Shell pages render without errors", () => {
   it("DashboardPage renders dashboard shell", () => {
     render(<DashboardPage />);
     expect(screen.getByTestId("dashboard-page")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /overview/i })).toBeInTheDocument();
   });
 
   it("AuditPage renders audit page with form", () => {

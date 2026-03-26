@@ -5,10 +5,17 @@ const API_BASE = process.env["NEXT_PUBLIC_API_BASE_URL"] ?? "http://localhost:30
 /* ------------------------------------------------------------------ */
 
 /** A project in the list response. */
+/** Per-project health status from backend enrichment (PERF-164). */
+export type ProjectHealthStatus = "healthy" | "in_progress" | "attention" | "unknown";
+
+/** A project in the list response (enriched per PERF-164). */
 export interface ProjectItem {
   projectId: string;
   ownerId: string;
   name: string;
+  description?: string | null;
+  urlCount: number;
+  healthStatus: ProjectHealthStatus;
   createdAt: string;
   updatedAt: string;
 }

@@ -234,6 +234,15 @@ function TopNavBar({
 
         {/* Right: utility icons + user */}
         <div className="flex items-center gap-2 lg:gap-4">
+          {/* New Audit CTA — PERF-165 AC8 */}
+          <Link
+            href="/audit"
+            data-testid="nav-new-audit"
+            className="hidden lg:flex items-center gap-2 bg-[#adc6ff]/90 hover:bg-[#adc6ff] text-[#002e6a] px-5 py-2 rounded-full font-medium text-sm transition-all"
+          >
+            New Audit
+          </Link>
+
           {/* Help icon — satisfies UX-001 Step 7 support path */}
           <button
             type="button"
